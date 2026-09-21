@@ -10,7 +10,7 @@ export function AppLayout() {
       <header className="topbar">
         <Link to="/" className="brand">
           <span className="brand-mark">A</span>
-          Ajanda
+          AJAN
         </Link>
         <nav className="nav">
           <NavLink to="/" end>

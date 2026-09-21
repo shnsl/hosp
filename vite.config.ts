@@ -12,8 +12,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'apple-touch-icon.png', 'pwa-192.png', 'pwa-512.png'],
       manifest: {
-        name: 'Terapist Ajanda',
-        short_name: 'Ajanda',
+        name: 'AJAN',
+        short_name: 'AJAN',
         description: 'Ev ziyareti planlama ve rota önerisi',
         theme_color: '#0f6568',
         background_color: '#eef5f5',
