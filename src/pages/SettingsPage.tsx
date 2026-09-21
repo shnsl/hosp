@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { IconCheck, IconLogout } from '../components/Icons'
 import { DEFAULT_PIN, pinSchema, useAuth } from '../lib/auth'
 import { useTheme } from '../lib/theme'
 
@@ -100,16 +101,26 @@ export function SettingsPage() {
             </p>
           )}
           {message && <p className="success">{message}</p>}
-          <button className="btn primary" type="submit" disabled={busy}>
-            Güncelle
+          <button
+            className="btn primary icon-action"
+            type="submit"
+            disabled={busy}
+            aria-label="Güncelle"
+          >
+            <IconCheck />
           </button>
         </form>
       </section>
 
       <section className="panel">
         <h2>Oturum</h2>
-        <button className="btn danger" type="button" onClick={() => void logout()}>
-          Çıkış yap
+        <button
+          className="btn danger icon-action"
+          type="button"
+          aria-label="Çıkış yap"
+          onClick={() => void logout()}
+        >
+          <IconLogout />
         </button>
       </section>
     </div>

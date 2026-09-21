@@ -49,7 +49,7 @@ export interface LegEstimate {
   toIndex: number
   distanceKm: number
   durationMin: number
-  source: 'osrm' | 'haversine'
+  source: 'osrm'
 }
 
 export interface RouteSuggestion {
@@ -57,6 +57,6 @@ export interface RouteSuggestion {
   legs: LegEstimate[]
   totalDistanceKm: number
   totalDurationMin: number
-  source: 'osrm' | 'haversine'
+  source: 'osrm'
   warning?: string
 }

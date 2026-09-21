@@ -9,8 +9,13 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    // practices/{uid} — doküman id = owner uid
+    function isPracticeDocOwner(practiceId) {
+      return isSignedIn() && request.auth.uid == practiceId;
+    }
+
     function isPracticeOwner(practiceId) {
-      return isSignedIn()
+      return isPracticeDocOwner(practiceId)
         && exists(/databases/$(database)/documents/practices/$(practiceId))
         && get(/databases/$(database)/documents/practices/$(practiceId)).data.ownerUid
           == request.auth.uid;
@@ -28,8 +33,9 @@ service cloud.firestore {
     }
 
     match /practices/{practiceId} {
-      allow read: if isPracticeOwner(practiceId);
-      allow create: if isSignedIn()
+      // Yokken getDoc için: uid eşleşmesi yeterli (exists kontrolü bootstrap'i kırıyordu)
+      allow read: if isPracticeDocOwner(practiceId);
+      allow create: if isPracticeDocOwner(practiceId)
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.keys().hasAll(['name', 'ownerUid', 'createdAt']);
       allow update: if isPracticeOwner(practiceId)

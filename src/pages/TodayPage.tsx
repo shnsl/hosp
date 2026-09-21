@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { IconDown, IconPlus, IconRoute, IconUp } from '../components/Icons'
+import { IconCheck, IconClose, IconDown, IconPlus, IconRoute, IconUp } from '../components/Icons'
 import { subscribePatients } from '../features/patients/api'
 import {
   applyVisitOrderAndTimes,
@@ -164,17 +164,17 @@ export function TodayPage() {
           </p>
         </div>
         <div className="row-actions">
-          <Link className="btn" to="/agenda">
-            <IconPlus /> Planla
+          <Link className="btn primary icon-action" to="/agenda" aria-label="Planla">
+            <IconPlus />
           </Link>
           <button
-            className="btn primary"
+            className="btn primary icon-action"
             type="button"
+            aria-label="Rota öner"
             onClick={() => void optimize()}
             disabled={routeBusy || activeVisits.length < 2}
           >
             <IconRoute />
-            {routeBusy ? 'Hesaplanıyor…' : 'Rota öner'}
           </button>
         </div>
       </header>
@@ -188,10 +188,9 @@ export function TodayPage() {
       {suggestion && (
         <section className="panel highlight">
           <h2>Önerilen sıra</h2>
-          {suggestion.warning && <p className="muted small">{suggestion.warning}</p>}
           <p className="muted">
             Toplam ~{suggestion.totalDistanceKm} km · ~{suggestion.totalDurationMin}{' '}
-            dk yol ({suggestion.source === 'osrm' ? 'araç' : 'yaklaşık'})
+            dk araç yolu
           </p>
           <ol className="suggest-list">
             {suggestion.order.map((idx, i) => {
@@ -204,7 +203,7 @@ export function TodayPage() {
                   {leg ? (
                     <span className="muted small">
                       {' '}
-                      → sonraki: {leg.distanceKm} km / {leg.durationMin} dk
+                      → sonraki: {leg.distanceKm} km / {leg.durationMin} dk (araç)
                     </span>
                   ) : null}
                 </li>
@@ -212,11 +211,21 @@ export function TodayPage() {
             })}
           </ol>
           <div className="row-actions">
-            <button className="btn primary" type="button" onClick={() => void applySuggestion()}>
-              Ajandaya uygula
+            <button
+              className="btn primary icon-action"
+              type="button"
+              aria-label="Uygula"
+              onClick={() => void applySuggestion()}
+            >
+              <IconCheck />
             </button>
-            <button className="btn" type="button" onClick={() => setSuggestion(null)}>
-              Vazgeç
+            <button
+              className="btn icon-action"
+              type="button"
+              aria-label="Vazgeç"
+              onClick={() => setSuggestion(null)}
+            >
+              <IconClose />
             </button>
           </div>
         </section>
@@ -225,8 +234,8 @@ export function TodayPage() {
       {activeVisits.length === 0 ? (
         <section className="panel empty">
           <p>Bugün için ziyaret yok.</p>
-          <Link className="btn primary" to="/agenda">
-            Ajandaya ekle
+          <Link className="btn primary icon-action" to="/agenda" aria-label="Ajandaya ekle">
+            <IconPlus />
           </Link>
         </section>
       ) : (
@@ -271,11 +280,12 @@ export function TodayPage() {
                     <IconDown />
                   </button>
                   <button
-                    className={`btn compact ${visit.status === 'done' ? 'ghost' : ''}`}
+                    className={`btn icon-action ${visit.status === 'done' ? 'ghost' : 'primary'}`}
                     type="button"
+                    aria-label={visit.status === 'done' ? 'Geri al' : 'Tamam'}
                     onClick={() => void markDone(visit)}
                   >
-                    {visit.status === 'done' ? 'Geri al' : 'Tamam'}
+                    <IconCheck />
                   </button>
                 </div>
                 {legAfter && (

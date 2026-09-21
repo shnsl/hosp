@@ -449,7 +449,27 @@ html[data-theme='dark'] .btn.primary {
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
+  align-items: center;
+}
+
+.patient-card.is-editing {
+  border-color: var(--brand);
+}
+
+.patient-card-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
   align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
 }
 
 .patient-card.inactive {
@@ -474,6 +494,152 @@ html[data-theme='dark'] .btn.primary {
   padding: 1.5rem;
 }
 
+.plan-hint {
+  margin: -0.35rem 0 0.85rem;
+}
+
+.schedule-rules {
+  margin: 0;
+}
+
+.plan-day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.plan-day-head h2 {
+  margin: 0;
+}
+
+.plan-item {
+  width: 100%;
+}
+
+.plan-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.plan-order {
+  width: 2.6rem;
+  height: 2.6rem;
+  font-size: 1.25rem;
+  border-radius: 12px;
+}
+
+.plan-name {
+  margin: 0;
+  font-size: 1.2rem;
+  line-height: 1.25;
+}
+
+.plan-time {
+  margin: 0.2rem 0 0;
+  font-size: 0.95rem;
+}
+
+.pick-name {
+  font-size: 1.1rem;
+}
+
+.icon-action {
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 1.2rem;
+  line-height: 1;
+  font-weight: 700;
+  display: inline-grid;
+  place-items: center;
+}
+
+.icon-action svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.sortable-list,
+.patient-pick-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.sortable-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.55rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.55rem 0.65rem;
+  box-shadow: var(--shadow);
+  touch-action: none;
+  user-select: none;
+}
+
+.sortable-row.is-dragging {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 10%, var(--surface));
+  opacity: 0.95;
+}
+
+.drag-handle {
+  flex-shrink: 0;
+  width: 2.4rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-accent);
+  color: var(--muted);
+  cursor: grab;
+  font-size: 1rem;
+  letter-spacing: -0.15em;
+  touch-action: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.sortable-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.plan-row-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.plan-row-main .visit-name {
+  margin: 0;
+}
+
+.patient-pick-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.8rem 0.9rem;
+}
+
 .auth-panel {
   width: min(420px, 100%);
   background: var(--surface);
@@ -481,10 +647,121 @@ html[data-theme='dark'] .btn.primary {
   border-radius: 18px;
   padding: 1.5rem;
   box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.auth-brand-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.75rem;
 }
 
 .auth-app-icon {
   border-radius: 14px;
+}
+
+.auth-panel .stack {
+  text-align: left;
+}
+
+.auth-panel .error {
+  text-align: center;
+}
+
+.auth-panel .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.coords-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.coords-input-row {
+  display: flex;
+  gap: 0.45rem;
+  align-items: stretch;
+}
+
+.coords-input-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.coords-hint {
+  margin-top: -0.1rem;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(18, 24, 32, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.modal {
+  width: min(720px, 100%);
+  max-height: min(92vh, 900px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0.75rem;
+}
+
+.modal-header h2 {
+  margin: 0.1rem 0 0.15rem;
+  font-size: 1.25rem;
+}
+
+.modal-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.coords-preview {
+  font-size: 0.85rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.45rem 0.65rem;
+  max-width: 100%;
+  overflow: auto;
+}
+
+.map-picker-canvas {
+  flex: 1;
+  min-height: 320px;
+  height: min(55vh, 480px);
+  width: 100%;
+  background: #dce3ea;
+}
+
+.map-picker-canvas .leaflet-container {
+  width: 100%;
+  height: 100%;
+  font: inherit;
 }
 
 .section-title-with-icon {

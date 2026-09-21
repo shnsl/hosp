@@ -4,7 +4,6 @@ import {
   deleteDoc,
   doc,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   updateDoc,
@@ -49,15 +48,14 @@ export function subscribeVisitsForDate(
   const q = query(
     collection(db, 'practices', practiceId, 'visits'),
     where('date', '==', date),
-    orderBy('order'),
   )
 
   return onSnapshot(
     q,
     (snap) => {
-      const visits = snap.docs.map((d) =>
-        mapVisit(d.id, d.data() as Record<string, unknown>),
-      )
+      const visits = snap.docs
+        .map((d) => mapVisit(d.id, d.data() as Record<string, unknown>))
+        .sort((a, b) => a.order - b.order || a.startTime.localeCompare(b.startTime))
       onData(visits)
     },
     (err) => onError?.(err),
@@ -123,17 +121,26 @@ export async function reorderVisits(
 
 export async function applyVisitOrderAndTimes(
   practiceId: string,
-  visits: Array<{ id: string; order: number; startTime: string }>,
+  visits: Array<{
+    id: string
+    order: number
+    startTime: string
+    durationMin?: number
+  }>,
 ): Promise<void> {
   const batch = writeBatch(db)
   const now = new Date().toISOString()
   for (const v of visits) {
-    batch.update(doc(db, 'practices', practiceId, 'visits', v.id), {
+    const patch: Record<string, unknown> = {
       order: v.order,
       startTime: v.startTime,
       updatedAt: serverTimestamp(),
       updatedAtIso: now,
-    })
+    }
+    if (typeof v.durationMin === 'number') {
+      patch.durationMin = v.durationMin
+    }
+    batch.update(doc(db, 'practices', practiceId, 'visits', v.id), patch)
   }
   await batch.commit()
 }

@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 
 export function LoginPage() {
-  const { user, loading, loginWithPin, error, clearError } = useAuth()
+  const { user, profile, loading, loginWithPin, error, clearError } = useAuth()
   const [pin, setPin] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -20,7 +20,8 @@ export function LoginPage() {
     return () => window.clearTimeout(id)
   }, [loading, user])
 
-  if (!loading && user) {
+  // Profil (Firestore) hazır olmadan ana sayfaya geçme
+  if (!loading && user && profile) {
     return <Navigate to="/" replace />
   }
 
@@ -37,6 +38,8 @@ export function LoginPage() {
     setSubmitting(true)
     try {
       await loginWithPin(pin)
+      // onAuthStateChanged profili yükler; hata varsa error state'e düşer
+      await new Promise((r) => setTimeout(r, 800))
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Giriş başarısız')
     } finally {

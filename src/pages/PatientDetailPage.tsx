@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { CoordsField } from '../components/CoordsField'
+import { IconCheck, IconTrash } from '../components/Icons'
 import {
   deletePatient,
-  refreshPatientCoords,
   subscribePatients,
   updatePatient,
   type PatientFormValues,
@@ -30,7 +31,11 @@ export function PatientDetailPage() {
       if (found) {
         setForm({
           name: found.name,
-          address: found.address,
+          coords:
+            found.lat != null && found.lng != null
+              ? `${found.lat}, ${found.lng}`
+              : '',
+          address: found.address ?? '',
           phone: found.phone ?? '',
           notes: found.notes ?? '',
           active: found.active,
@@ -72,21 +77,6 @@ export function PatientDetailPage() {
     }
   }
 
-  async function onRefreshCoords() {
-    if (!practiceId || !patient) return
-    setBusy(true)
-    setError(null)
-    setMessage(null)
-    try {
-      await refreshPatientCoords(practiceId, patient)
-      setMessage('Konum güncellendi')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Konum alınamadı')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function onDelete() {
     if (!practiceId || !patient) return
     if (!window.confirm(`“${patient.name}” silinsin mi?`)) return
@@ -122,12 +112,16 @@ export function PatientDetailPage() {
               required
             />
           </label>
+          <CoordsField
+            value={form.coords}
+            onChange={(coords) => setForm({ ...form, coords })}
+            required
+          />
           <label>
-            Adres
+            Adres notu (opsiyonel)
             <textarea
-              value={form.address}
+              value={form.address ?? ''}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
-              required
             />
           </label>
           <label>
@@ -153,26 +147,22 @@ export function PatientDetailPage() {
             />
             Aktif
           </label>
-          <p className="muted small">
-            Konum:{' '}
-            {patient.lat != null && patient.lng != null
-              ? `${patient.lat.toFixed(5)}, ${patient.lng.toFixed(5)}`
-              : 'yok'}
-          </p>
           <div className="row-actions">
-            <button className="btn primary" type="submit" disabled={busy}>
-              Kaydet
+            <button
+              className="btn primary icon-action"
+              type="submit"
+              disabled={busy}
+              aria-label="Kaydet"
+            >
+              <IconCheck />
             </button>
             <button
-              className="btn"
+              className="btn danger icon-action"
               type="button"
-              disabled={busy}
-              onClick={() => void onRefreshCoords()}
+              aria-label="Sil"
+              onClick={() => void onDelete()}
             >
-              Konumu yenile
-            </button>
-            <button className="btn danger" type="button" onClick={() => void onDelete()}>
-              Sil
+              <IconTrash />
             </button>
           </div>
         </form>

@@ -84,6 +84,17 @@ function authErrorCode(err: unknown): string | null {
   return null
 }
 
+function friendlyFirestoreError(err: unknown): string {
+  const code = authErrorCode(err)
+  if (code === 'permission-denied' || code === 'firestore/permission-denied') {
+    return 'Firestore kuralları engelliyor. Firebase Console → Firestore → Rules içine firestore.rules dosyasını yapıştırıp Publish et, sonra tekrar giriş yap.'
+  }
+  if (err instanceof Error && err.message) {
+    return err.message
+  }
+  return 'Oturum yüklenemedi'
+}
+
 async function ensureUserPractice(
   user: User,
   practiceName = 'Pratiğim',
@@ -161,7 +172,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
       setLoading(true)
-      setError(null)
       try {
         if (!nextUser) {
           setUser(null)
@@ -180,10 +190,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(nextUser)
         const nextProfile = await ensureUserPractice(nextUser)
         setProfile(nextProfile)
+        setError(null)
       } catch (err) {
         console.error(err)
-        setError(err instanceof Error ? err.message : 'Oturum yüklenemedi')
+        setError(friendlyFirestoreError(err))
+        setUser(null)
         setProfile(null)
+        clearSessionUnlock()
+        try {
+          await signOut(auth)
+        } catch {
+          // ignore
+        }
       } finally {
         setLoading(false)
       }
@@ -195,7 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithPin = useCallback(async (pin: string) => {
     setError(null)
     if (!pinSchema.test(pin)) {
-      throw new Error('Şifre hatalı')
+      throw new Error('Şifre 6 haneli olmalı')
     }
 
     markSessionUnlocked()
@@ -203,36 +221,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await signInWithEmailAndPassword(auth, HOSP_AUTH_EMAIL, pin)
     } catch (err) {
       const code = authErrorCode(err)
-      const missingUser =
+      const missingOrWrong =
         code === 'auth/user-not-found' ||
         code === 'auth/invalid-credential' ||
-        code === 'auth/invalid-login-credentials'
+        code === 'auth/invalid-login-credentials' ||
+        code === 'auth/wrong-password'
 
-      if (missingUser && pin === DEFAULT_PIN) {
+      // İlk kurulum: hesap yoksa girilen PIN ile oluştur
+      if (missingOrWrong) {
         try {
-          await createUserWithEmailAndPassword(auth, HOSP_AUTH_EMAIL, DEFAULT_PIN)
+          await createUserWithEmailAndPassword(auth, HOSP_AUTH_EMAIL, pin)
           return
         } catch (createErr) {
-          clearSessionUnlock()
           const createCode = authErrorCode(createErr)
           if (createCode === 'auth/email-already-in-use') {
+            clearSessionUnlock()
             throw new Error('Şifre hatalı')
           }
-          throw createErr
+          clearSessionUnlock()
+          throw createErr instanceof Error
+            ? createErr
+            : new Error('Hesap oluşturulamadı')
         }
       }
 
       clearSessionUnlock()
-
-      if (
-        code === 'auth/wrong-password' ||
-        code === 'auth/invalid-credential' ||
-        code === 'auth/invalid-login-credentials' ||
-        code === 'auth/user-not-found'
-      ) {
-        throw new Error('Şifre hatalı')
-      }
-
       throw err instanceof Error ? err : new Error('Giriş başarısız')
     }
   }, [])

@@ -13,11 +13,13 @@ import {
 import { z } from 'zod'
 import type { Patient } from '../../types'
 import { db } from '../../lib/firebase'
-import { geocodeAddress } from '../routing/geocode'
+import { formatLatLng, parseLatLngText } from '../routing/coords'
 
 export const patientFormSchema = z.object({
   name: z.string().trim().min(1, 'Ad gerekli'),
-  address: z.string().trim().min(3, 'Adres gerekli'),
+  /** "37.092154, 37.400484" */
+  coords: z.string().trim().min(3, 'Konum gerekli'),
+  address: z.string().trim().optional(),
   phone: z.string().trim().optional(),
   notes: z.string().trim().optional(),
   active: z.boolean().default(true),
@@ -67,21 +69,12 @@ export async function createPatient(
   values: PatientFormValues,
 ): Promise<string> {
   const parsed = patientFormSchema.parse(values)
-  let lat: number | null = null
-  let lng: number | null = null
-
-  try {
-    const geo = await geocodeAddress(parsed.address)
-    lat = geo.lat
-    lng = geo.lng
-  } catch {
-    // Adres kaydedilir; konum sonra tekrar denenebilir
-  }
+  const { lat, lng } = parseLatLngText(parsed.coords)
 
   const now = new Date().toISOString()
   const ref = await addDoc(collection(db, 'practices', practiceId, 'patients'), {
     name: parsed.name,
-    address: parsed.address,
+    address: parsed.address || formatLatLng(lat, lng, 6),
     phone: parsed.phone || null,
     notes: parsed.notes || null,
     active: parsed.active,
@@ -99,30 +92,21 @@ export async function updatePatient(
   practiceId: string,
   patientId: string,
   values: PatientFormValues,
-  options?: { regeocode?: boolean },
 ): Promise<void> {
   const parsed = patientFormSchema.parse(values)
-  const payload: Record<string, unknown> = {
+  const { lat, lng } = parseLatLngText(parsed.coords)
+
+  await updateDoc(doc(db, 'practices', practiceId, 'patients', patientId), {
     name: parsed.name,
-    address: parsed.address,
+    address: parsed.address || formatLatLng(lat, lng, 6),
     phone: parsed.phone || null,
     notes: parsed.notes || null,
     active: parsed.active,
+    lat,
+    lng,
     updatedAt: serverTimestamp(),
     updatedAtIso: new Date().toISOString(),
-  }
-
-  if (options?.regeocode !== false) {
-    try {
-      const geo = await geocodeAddress(parsed.address)
-      payload.lat = geo.lat
-      payload.lng = geo.lng
-    } catch {
-      // Mevcut koordinatlar korunur
-    }
-  }
-
-  await updateDoc(doc(db, 'practices', practiceId, 'patients', patientId), payload)
+  })
 }
 
 export async function deletePatient(
@@ -130,17 +114,4 @@ export async function deletePatient(
   patientId: string,
 ): Promise<void> {
   await deleteDoc(doc(db, 'practices', practiceId, 'patients', patientId))
-}
-
-export async function refreshPatientCoords(
-  practiceId: string,
-  patient: Patient,
-): Promise<void> {
-  const geo = await geocodeAddress(patient.address)
-  await updateDoc(doc(db, 'practices', practiceId, 'patients', patient.id), {
-    lat: geo.lat,
-    lng: geo.lng,
-    updatedAt: serverTimestamp(),
-    updatedAtIso: new Date().toISOString(),
-  })
 }

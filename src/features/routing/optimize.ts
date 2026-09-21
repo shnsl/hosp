@@ -127,7 +127,6 @@ export async function suggestRoute(points: LatLng[]): Promise<RouteSuggestion> {
     totalDistanceKm,
     totalDurationMin,
     source: matrix.source,
-    warning: matrix.warning,
   }
 }
 
