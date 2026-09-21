@@ -1,0 +1,182 @@
+import { useEffect, useState, type FormEvent } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import {
+  deletePatient,
+  refreshPatientCoords,
+  subscribePatients,
+  updatePatient,
+  type PatientFormValues,
+} from '../features/patients/api'
+import { useAuth } from '../lib/auth'
+import type { Patient } from '../types'
+
+export function PatientDetailPage() {
+  const { id } = useParams<{ id: string }>()
+  const { practiceId } = useAuth()
+  const navigate = useNavigate()
+  const [patient, setPatient] = useState<Patient | null>(null)
+  const [form, setForm] = useState<PatientFormValues | null>(null)
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!practiceId) return
+    return subscribePatients(practiceId, (list) => {
+      const found = list.find((p) => p.id === id) ?? null
+      setPatient(found)
+      setLoaded(true)
+      if (found) {
+        setForm({
+          name: found.name,
+          address: found.address,
+          phone: found.phone ?? '',
+          notes: found.notes ?? '',
+          active: found.active,
+        })
+      }
+    })
+  }, [practiceId, id])
+
+  if (!loaded) {
+    return (
+      <div className="page">
+        <p className="muted">Yükleniyor…</p>
+      </div>
+    )
+  }
+
+  if (!form || !patient) {
+    return (
+      <div className="page">
+        <p className="muted">Hasta bulunamadı.</p>
+        <Link to="/patients">Listeye dön</Link>
+      </div>
+    )
+  }
+
+  async function onSave(e: FormEvent) {
+    e.preventDefault()
+    if (!practiceId || !id || !form) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await updatePatient(practiceId, id, form)
+      setMessage('Kaydedildi')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Kaydedilemedi')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onRefreshCoords() {
+    if (!practiceId || !patient) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await refreshPatientCoords(practiceId, patient)
+      setMessage('Konum güncellendi')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Konum alınamadı')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onDelete() {
+    if (!practiceId || !patient) return
+    if (!window.confirm(`“${patient.name}” silinsin mi?`)) return
+    await deletePatient(practiceId, patient.id)
+    navigate('/patients')
+  }
+
+  return (
+    <div className="page">
+      <header className="page-header">
+        <div>
+          <p className="eyebrow">
+            <Link to="/patients">Hastalar</Link>
+          </p>
+          <h1>{patient.name}</h1>
+        </div>
+      </header>
+
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      {message && <p className="success">{message}</p>}
+
+      <section className="panel">
+        <form className="stack" onSubmit={(e) => void onSave(e)}>
+          <label>
+            Ad soyad
+            <input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              required
+            />
+          </label>
+          <label>
+            Adres
+            <textarea
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              required
+            />
+          </label>
+          <label>
+            Telefon
+            <input
+              value={form.phone ?? ''}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              inputMode="tel"
+            />
+          </label>
+          <label>
+            Not
+            <textarea
+              value={form.notes ?? ''}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            />
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={form.active}
+              onChange={(e) => setForm({ ...form, active: e.target.checked })}
+            />
+            Aktif
+          </label>
+          <p className="muted small">
+            Konum:{' '}
+            {patient.lat != null && patient.lng != null
+              ? `${patient.lat.toFixed(5)}, ${patient.lng.toFixed(5)}`
+              : 'yok'}
+          </p>
+          <div className="row-actions">
+            <button className="btn primary" type="submit" disabled={busy}>
+              Kaydet
+            </button>
+            <button
+              className="btn"
+              type="button"
+              disabled={busy}
+              onClick={() => void onRefreshCoords()}
+            >
+              Konumu yenile
+            </button>
+            <button className="btn danger" type="button" onClick={() => void onDelete()}>
+              Sil
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}

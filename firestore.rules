@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwnUser(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isPracticeOwner(practiceId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/practices/$(practiceId))
+        && get(/databases/$(database)/documents/practices/$(practiceId)).data.ownerUid
+          == request.auth.uid;
+    }
+
+    match /users/{uid} {
+      allow read: if isOwnUser(uid);
+      allow create: if isOwnUser(uid)
+        && request.resource.data.keys().hasAll(['email', 'practiceId', 'createdAt'])
+        && request.resource.data.email is string
+        && request.resource.data.practiceId is string;
+      allow update: if isOwnUser(uid)
+        && request.resource.data.practiceId == resource.data.practiceId;
+      allow delete: if false;
+    }
+
+    match /practices/{practiceId} {
+      allow read: if isPracticeOwner(practiceId);
+      allow create: if isSignedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.keys().hasAll(['name', 'ownerUid', 'createdAt']);
+      allow update: if isPracticeOwner(practiceId)
+        && request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if isPracticeOwner(practiceId);
+
+      match /{document=**} {
+        allow read, write: if isPracticeOwner(practiceId);
+      }
+    }
+  }
+}
