@@ -44,6 +44,7 @@ function mapVisit(id: string, data: Record<string, unknown>): Visit {
     order: typeof data.order === 'number' ? data.order : 0,
     durationMin: typeof data.durationMin === 'number' ? data.durationMin : 45,
     status: (data.status as VisitStatus) || 'planned',
+    statusDate: typeof data.statusDate === 'string' ? data.statusDate : null,
     createdAt: String(data.createdAtIso ?? data.createdAt ?? ''),
     updatedAt: String(data.updatedAtIso ?? data.updatedAt ?? ''),
   }
@@ -145,7 +146,10 @@ export async function updateVisit(
   practiceId: string,
   visitId: string,
   patch: Partial<
-    Pick<Visit, 'startTime' | 'durationMin' | 'status' | 'order' | 'patientId' | 'weekday'>
+    Pick<
+      Visit,
+      'startTime' | 'durationMin' | 'status' | 'statusDate' | 'order' | 'patientId' | 'weekday'
+    >
   >,
 ): Promise<void> {
   await updateDoc(doc(db, 'practices', practiceId, 'visits', visitId), {

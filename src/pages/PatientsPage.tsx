@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { CoordsField } from '../components/CoordsField'
 import { IconCheck, IconClose, IconPlus, IconTrash } from '../components/Icons'
 import {
@@ -8,8 +8,9 @@ import {
   updatePatient,
   type PatientFormValues,
 } from '../features/patients/api'
+import { subscribeAllVisits } from '../features/visits/api'
 import { useAuth } from '../lib/auth'
-import type { Patient } from '../types'
+import type { Patient, Visit } from '../types'
 
 const emptyForm: PatientFormValues = {
   name: '',
@@ -34,6 +35,7 @@ function patientToForm(p: Patient): PatientFormValues {
 export function PatientsPage() {
   const { practiceId } = useAuth()
   const [patients, setPatients] = useState<Patient[]>([])
+  const [visits, setVisits] = useState<Visit[]>([])
   const [form, setForm] = useState<PatientFormValues>(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -45,6 +47,20 @@ export function PatientsPage() {
     if (!practiceId) return
     return subscribePatients(practiceId, setPatients, (e) => setError(e.message))
   }, [practiceId])
+
+  useEffect(() => {
+    if (!practiceId) return
+    return subscribeAllVisits(practiceId, setVisits, (e) => setError(e.message))
+  }, [practiceId])
+
+  const weeklyVisitCount = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const v of visits) {
+      if (v.status === 'cancelled') continue
+      counts.set(v.patientId, (counts.get(v.patientId) ?? 0) + 1)
+    }
+    return counts
+  }, [visits])
 
   function openCreate() {
     setEditingId(null)
@@ -196,7 +212,9 @@ export function PatientsPage() {
       )}
 
       <ul className="patient-list">
-        {patients.map((p) => (
+        {patients.map((p) => {
+          const weekCount = weeklyVisitCount.get(p.id) ?? 0
+          return (
           <li
             key={p.id}
             className={`patient-card ${p.active ? '' : 'inactive'} ${editingId === p.id ? 'is-editing' : ''}`}
@@ -208,6 +226,11 @@ export function PatientsPage() {
             >
               <span className="visit-name plan-name">{p.name}</span>
               {p.address ? <span className="muted small">{p.address}</span> : null}
+              <span className="muted small patient-week-count">
+                {weekCount === 0
+                  ? 'Haftada plan yok'
+                  : `Haftada ${weekCount} kez`}
+              </span>
               {p.lat == null || p.lng == null ? (
                 <span className="warn small">Konum yok</span>
               ) : null}
@@ -221,7 +244,8 @@ export function PatientsPage() {
               <IconTrash />
             </button>
           </li>
-        ))}
+          )
+        })}
       </ul>
 
       {patients.length === 0 && !showForm && (

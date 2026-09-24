@@ -64,3 +64,26 @@ export function addDaysIso(isoDate: string, days: number): string {
   date.setDate(date.getDate() + days)
   return todayIsoDate(date)
 }
+
+/** Bu haftanın verilen gününün YYYY-MM-DD değeri (Pzt=1…Cmt=6) */
+export function occurrenceIsoForWeekday(weekday: Weekday, now = new Date()): string {
+  const jsDay = now.getDay()
+  const mondayOffset = jsDay === 0 ? -6 : 1 - jsDay
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset)
+  return todayIsoDate(
+    new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + (weekday - 1)),
+  )
+}
+
+/** Şablon ziyaretinde bu haftanın alındı/iptal işareti */
+export function effectiveVisitStatus(
+  visit: { status: string; statusDate?: string | null },
+  weekday: Weekday,
+  now = new Date(),
+): 'planned' | 'done' | 'cancelled' {
+  const occ = occurrenceIsoForWeekday(weekday, now)
+  if (visit.statusDate === occ && (visit.status === 'done' || visit.status === 'cancelled')) {
+    return visit.status
+  }
+  return 'planned'
+}

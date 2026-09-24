@@ -506,6 +506,48 @@ html[data-theme='dark'] .weekday-chip.is-active {
   color: var(--muted);
 }
 
+.search-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.search-field input {
+  font-size: 1.1rem;
+}
+
+.search-result-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.search-card {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.search-card.inactive {
+  opacity: 0.72;
+}
+
+.search-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+}
+
+.search-card p {
+  margin: 0;
+}
+
 .visit-list,
 .patient-list,
 .simple-list,
@@ -641,6 +683,43 @@ html[data-theme='dark'] .weekday-chip.is-active {
 
 .plan-day-head h2 {
   margin: 0;
+}
+
+.plan-day-stats {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.plan-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.btn.is-done-btn {
+  color: #0a6b4a;
+  background: color-mix(in srgb, #0a6b4a 16%, var(--surface));
+  border-color: color-mix(in srgb, #0a6b4a 35%, var(--line));
+}
+
+.btn.is-cancel-btn {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.plan-item.is-done {
+  border-color: color-mix(in srgb, #0a6b4a 35%, var(--line));
+}
+
+.plan-item.is-cancelled {
+  opacity: 0.45;
+  filter: grayscale(0.35);
+}
+
+.plan-item.is-cancelled .plan-name {
+  text-decoration: line-through;
 }
 
 .plan-item {

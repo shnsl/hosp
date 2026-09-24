@@ -8,6 +8,7 @@ import { ExceptionsPage } from './pages/ExceptionsPage'
 import { LoginPage } from './pages/LoginPage'
 import { PatientDetailPage } from './pages/PatientDetailPage'
 import { PatientsPage } from './pages/PatientsPage'
+import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { WeeklyPlanPage } from './pages/WeeklyPlanPage'
 
@@ -27,6 +28,7 @@ export default function App() {
                 <Route path="agenda" element={<Navigate to="/" replace />} />
                 <Route path="patients" element={<PatientsPage />} />
                 <Route path="patients/:id" element={<PatientDetailPage />} />
+                <Route path="search" element={<SearchPage />} />
                 <Route path="exceptions" element={<ExceptionsPage />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Route>

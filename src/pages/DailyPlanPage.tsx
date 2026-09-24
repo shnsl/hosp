@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { IconClose, IconPlus, IconRefresh, IconRoute, IconTrash } from '../components/Icons'
+import { IconCheck, IconClose, IconPlus, IconRefresh, IconRoute, IconTrash } from '../components/Icons'
 import { SortableList } from '../components/SortableList'
 import {
   DAY_START,
@@ -17,16 +17,19 @@ import {
   deleteVisit,
   migrateVisitsToWeekday,
   subscribeVisitsForWeekday,
+  updateVisit,
 } from '../features/visits/api'
 import { useAuth } from '../lib/auth'
 import {
   WEEKDAYS,
+  effectiveVisitStatus,
   isWeekday,
+  occurrenceIsoForWeekday,
   todayWeekday,
   weekdayLabel,
   type Weekday,
 } from '../lib/dates'
-import type { LatLng, Patient, Visit } from '../types'
+import type { LatLng, Patient, Visit, VisitStatus } from '../types'
 
 const MIGRATE_KEY = 'hosp-visits-weekday-migrated'
 
@@ -103,11 +106,22 @@ export function DailyPlanPage() {
 
   const sorted = useMemo(
     () =>
-      [...visits]
-        .filter((v) => v.status !== 'cancelled')
-        .sort((a, b) => a.order - b.order || a.startTime.localeCompare(b.startTime)),
+      [...visits].sort(
+        (a, b) => a.order - b.order || a.startTime.localeCompare(b.startTime),
+      ),
     [visits],
   )
+
+  const statusCounts = useMemo(() => {
+    let done = 0
+    let cancelled = 0
+    for (const v of sorted) {
+      const s = effectiveVisitStatus(v, weekday)
+      if (s === 'done') done += 1
+      if (s === 'cancelled') cancelled += 1
+    }
+    return { done, cancelled }
+  }, [sorted, weekday])
 
   const plannedPatientIds = useMemo(
     () => new Set(sorted.map((v) => v.patientId)),
@@ -134,7 +148,12 @@ export function DailyPlanPage() {
     setScheduling(true)
     setError(null)
     try {
-      const schedule = await buildDaySchedule(ordered, patientMap)
+      const skipVisitIds = new Set(
+        ordered
+          .filter((v) => effectiveVisitStatus(v, weekday) === 'cancelled')
+          .map((v) => v.id),
+      )
+      const schedule = await buildDaySchedule(ordered, patientMap, { skipVisitIds })
       await saveDaySchedule(practiceId, schedule)
       setLegs(schedule.legs)
     } catch (err) {
@@ -201,6 +220,22 @@ export function DailyPlanPage() {
       .map((id) => byId.get(id))
       .filter((v): v is Visit => Boolean(v))
     await reschedule(next)
+  }
+
+  async function setVisitAttendance(visit: Visit, next: VisitStatus) {
+    if (!practiceId) return
+    const current = effectiveVisitStatus(visit, weekday)
+    const status: VisitStatus = current === next ? 'planned' : next
+    const statusDate = status === 'planned' ? null : occurrenceIsoForWeekday(weekday)
+    try {
+      await updateVisit(practiceId, visit.id, { status, statusDate })
+      const updated = sorted.map((v) =>
+        v.id === visit.id ? { ...v, status, statusDate } : v,
+      )
+      await reschedule(updated)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Durum güncellenemedi')
+    }
   }
 
   async function optimizeOrderWithOsrm(startIndex: number) {
@@ -286,7 +321,15 @@ export function DailyPlanPage() {
 
       <section className="panel plan-day">
         <div className="plan-day-head">
-          <h2>{weekdayLabel(weekday)} sırası</h2>
+          <h2>
+            {weekdayLabel(weekday)} sırası
+            {sorted.length > 0 ? (
+              <span className="plan-day-stats muted">
+                {' '}
+                · {statusCounts.done} alındı · {statusCounts.cancelled} iptal
+              </span>
+            ) : null}
+          </h2>
           {sorted.length > 0 && (
             <div className="row-actions">
               <button
@@ -327,29 +370,59 @@ export function DailyPlanPage() {
               const duration = visit.durationMin || VISIT_DURATION_MIN
               const end = endTimeOf(visit.startTime, duration)
               const leg = legAfter.get(visit.id)
+              const att = effectiveVisitStatus(visit, weekday)
               return (
-                <div className="plan-item">
+                <div
+                  className={`plan-item ${att === 'done' ? 'is-done' : ''} ${att === 'cancelled' ? 'is-cancelled' : ''}`}
+                >
                   <div className="plan-item-top">
                     <div className="plan-row-main">
                       <span className="visit-order plan-order">{index + 1}</span>
                       <div>
                         <p className="visit-name plan-name">{patient?.name ?? 'Hasta'}</p>
-                        <p className="muted plan-time">
-                          {visit.startTime} – {end}
-                        </p>
+                        {att !== 'cancelled' ? (
+                          <p className="muted plan-time">
+                            {visit.startTime} – {end}
+                          </p>
+                        ) : (
+                          <p className="muted small plan-time">İptal — saatten çıkarıldı</p>
+                        )}
                         {(!patient || patient.lat == null || patient.lng == null) && (
                           <p className="warn small">Konum yok</p>
                         )}
                       </div>
                     </div>
-                    <button
-                      className="btn danger icon-action"
-                      type="button"
-                      aria-label="Çıkar"
-                      onClick={() => void removeVisit(visit)}
-                    >
-                      <IconTrash />
-                    </button>
+                    <div className="plan-item-actions">
+                      <button
+                        className={`btn icon-action ${att === 'done' ? 'is-done-btn' : ''}`}
+                        type="button"
+                        aria-label="Alındı"
+                        title="Alındı"
+                        data-no-drag
+                        onClick={() => void setVisitAttendance(visit, 'done')}
+                      >
+                        <IconCheck />
+                      </button>
+                      <button
+                        className={`btn icon-action ${att === 'cancelled' ? 'is-cancel-btn' : ''}`}
+                        type="button"
+                        aria-label="İptal / alınamadı"
+                        title="İptal / alınamadı"
+                        data-no-drag
+                        onClick={() => void setVisitAttendance(visit, 'cancelled')}
+                      >
+                        <IconClose />
+                      </button>
+                      <button
+                        className="btn danger icon-action"
+                        type="button"
+                        aria-label="Çıkar"
+                        data-no-drag
+                        onClick={() => void removeVisit(visit)}
+                      >
+                        <IconTrash />
+                      </button>
+                    </div>
                   </div>
                   {leg && (
                     <p className="leg-hint muted small">

@@ -3,6 +3,7 @@ import {
   IconAgenda,
   IconExceptions,
   IconPatients,
+  IconSearch,
   IconSettings,
   IconWeek,
 } from './Icons'
@@ -24,6 +25,9 @@ export function AppLayout() {
           </NavLink>
           <NavLink to="/patients" title="Hastalar" aria-label="Hastalar">
             <IconPatients />
+          </NavLink>
+          <NavLink to="/search" title="Ara" aria-label="Ara">
+            <IconSearch />
           </NavLink>
           <NavLink to="/exceptions" title="İstisnalar" aria-label="İstisnalar">
             <IconExceptions />

@@ -22,20 +22,35 @@ export function endTimeOf(startTime: string, durationMin = VISIT_DURATION_MIN): 
 }
 
 /**
- * İlk hasta DAY_START'ta başlar.
- * Her hastada VISIT_DURATION_MIN kalınır.
- * Sonraki başlangıç = bitiş + OSRM araç süresi.
+ * İlk aktif hasta DAY_START'ta başlar.
+ * skipVisitIds içindeki ziyaretler rota/saatten çıkar (sırada kalır).
  */
 export async function buildDaySchedule(
   orderedVisits: Visit[],
   patientMap: Map<string, Patient>,
+  options?: { skipVisitIds?: ReadonlySet<string> },
 ): Promise<DaySchedule> {
   if (orderedVisits.length === 0) {
     return { visits: [], legs: [] }
   }
 
+  const skip = options?.skipVisitIds ?? new Set<string>()
+  const active = orderedVisits.filter((v) => !skip.has(v.id))
+
+  if (active.length === 0) {
+    return {
+      visits: orderedVisits.map((v, i) => ({
+        id: v.id,
+        order: i,
+        startTime: v.startTime || DAY_START,
+        durationMin: v.durationMin || VISIT_DURATION_MIN,
+      })),
+      legs: [],
+    }
+  }
+
   const points: LatLng[] = []
-  for (const v of orderedVisits) {
+  for (const v of active) {
     const p = patientMap.get(v.patientId)
     if (!p || p.lat == null || p.lng == null) {
       throw new Error(
@@ -55,19 +70,14 @@ export async function buildDaySchedule(
   }
 
   let time = DAY_START
-  const visits: DaySchedule['visits'] = []
+  const activeTimes = new Map<string, { startTime: string; durationMin: number }>()
   const legs: ScheduleLeg[] = []
 
-  for (let i = 0; i < orderedVisits.length; i++) {
-    const v = orderedVisits[i]
-    visits.push({
-      id: v.id,
-      order: i,
-      startTime: time,
-      durationMin: VISIT_DURATION_MIN,
-    })
+  for (let i = 0; i < active.length; i++) {
+    const v = active[i]
+    activeTimes.set(v.id, { startTime: time, durationMin: VISIT_DURATION_MIN })
 
-    if (i < orderedVisits.length - 1) {
+    if (i < active.length - 1) {
       const drive = durationMinMatrix[i][i + 1]
       const km = distanceKmMatrix[i][i + 1]
       if (!Number.isFinite(drive) || !Number.isFinite(km)) {
@@ -81,6 +91,16 @@ export async function buildDaySchedule(
       time = addMinutesToTime(time, VISIT_DURATION_MIN + drive)
     }
   }
+
+  const visits: DaySchedule['visits'] = orderedVisits.map((v, i) => {
+    const timed = activeTimes.get(v.id)
+    return {
+      id: v.id,
+      order: i,
+      startTime: timed?.startTime ?? v.startTime ?? DAY_START,
+      durationMin: timed?.durationMin ?? v.durationMin ?? VISIT_DURATION_MIN,
+    }
+  })
 
   return { visits, legs }
 }

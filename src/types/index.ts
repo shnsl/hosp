@@ -49,6 +49,8 @@ export interface Visit {
   order: number
   durationMin: number
   status: VisitStatus
+  /** Alındı/iptal işaretinin geçerli olduğu takvim günü (YYYY-MM-DD) */
+  statusDate?: string | null
   createdAt: string
   updatedAt: string
 }
