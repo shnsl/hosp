@@ -37,6 +37,8 @@ function mapPatient(id: string, data: Record<string, unknown>): Patient {
     phone: data.phone ? String(data.phone) : undefined,
     notes: data.notes ? String(data.notes) : undefined,
     active: data.active !== false,
+    acceptFrom: typeof data.acceptFrom === 'string' && data.acceptFrom ? data.acceptFrom : null,
+    acceptTo: typeof data.acceptTo === 'string' && data.acceptTo ? data.acceptTo : null,
     createdAt: String(data.createdAtIso ?? data.createdAt ?? ''),
     updatedAt: String(data.updatedAtIso ?? data.updatedAt ?? ''),
   }
@@ -107,6 +109,51 @@ export async function updatePatient(
     updatedAt: serverTimestamp(),
     updatedAtIso: new Date().toISOString(),
   })
+}
+
+export async function updatePatientAcceptWindow(
+  practiceId: string,
+  patientId: string,
+  acceptFrom: string | null,
+  acceptTo: string | null,
+): Promise<void> {
+  const from = normalizeTime24(acceptFrom)
+  const to = normalizeTime24(acceptTo)
+  if (acceptFrom?.trim() && !from) {
+    throw new Error('Başlangıç saati 24s formatında olmalı (ör. 08:45)')
+  }
+  if (acceptTo?.trim() && !to) {
+    throw new Error('Bitiş saati 24s formatında olmalı (ör. 12:00)')
+  }
+  if (from && to && from >= to) {
+    throw new Error('Bitiş, başlangıçtan sonra olmalı')
+  }
+
+  await updateDoc(doc(db, 'practices', practiceId, 'patients', patientId), {
+    acceptFrom: from,
+    acceptTo: to,
+    updatedAt: serverTimestamp(),
+    updatedAtIso: new Date().toISOString(),
+  })
+}
+
+/** "8:45" / "08:45" / "0845" → "08:45"; geçersizse null */
+function normalizeTime24(input: string | null | undefined): string | null {
+  if (!input?.trim()) return null
+  const digits = input.replace(/\D/g, '')
+  if (digits.length !== 3 && digits.length !== 4) {
+    const m = input.trim().match(/^(\d{1,2}):(\d{2})$/)
+    if (!m) return null
+    const h = Number(m[1])
+    const min = Number(m[2])
+    if (!Number.isFinite(h) || !Number.isFinite(min) || h > 23 || min > 59) return null
+    return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
+  }
+  const padded = digits.padStart(4, '0')
+  const h = Number(padded.slice(0, 2))
+  const min = Number(padded.slice(2))
+  if (h > 23 || min > 59) return null
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
 }
 
 export async function deletePatient(

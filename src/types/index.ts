@@ -1,5 +1,8 @@
 export type VisitStatus = 'planned' | 'done' | 'cancelled'
 
+/** Pazartesi=1 … Cumartesi=6 */
+export type Weekday = 1 | 2 | 3 | 4 | 5 | 6
+
 export interface UserProfile {
   email: string
   displayName?: string
@@ -23,14 +26,25 @@ export interface Patient {
   phone?: string
   notes?: string
   active: boolean
+  /** Tedavi kabul başlangıcı HH:MM; yoksa kısıt yok */
+  acceptFrom?: string | null
+  /** Tedavi kabul bitişi HH:MM; yoksa kısıt yok */
+  acceptTo?: string | null
   createdAt: string
   updatedAt: string
+}
+
+/** Otomatik sıralama için hasta saat penceresi (dakika, gün başından) */
+export interface AcceptWindowMin {
+  fromMin: number | null
+  toMin: number | null
 }
 
 export interface Visit {
   id: string
   patientId: string
-  date: string
+  /** 1=Pzt … 6=Cmt — her hafta tekrarlar */
+  weekday: Weekday
   startTime: string
   order: number
   durationMin: number

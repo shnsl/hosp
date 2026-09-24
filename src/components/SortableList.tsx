@@ -15,8 +15,8 @@ interface SortableListProps<T extends Item> {
 }
 
 /**
- * Mobil uyumlu sürükle-bırak sıralama (pointer events).
- * Sadece .drag-handle üzerinden başlar.
+ * Satırın kendisinden sürükle-bırak (buton/link hariç).
+ * Sağda scroll boşluğu CSS ile bırakılır.
  */
 export function SortableList<T extends Item>({
   items,
@@ -35,17 +35,22 @@ export function SortableList<T extends Item>({
     setLocal(items)
   }, [items])
 
-  function onHandlePointerDown(e: ReactPointerEvent, index: number) {
+  function isInteractiveTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) return false
+    return Boolean(target.closest('button, a, input, textarea, select, [data-no-drag]'))
+  }
+
+  function onRowPointerDown(e: ReactPointerEvent<HTMLLIElement>, index: number) {
     if (e.button !== 0) return
+    if (isInteractiveTarget(e.target)) return
     e.preventDefault()
-    const target = e.currentTarget
-    target.setPointerCapture(e.pointerId)
+    e.currentTarget.setPointerCapture(e.pointerId)
     dragIndexRef.current = index
     draggingRef.current = true
     setDraggingId(localRef.current[index]?.id ?? null)
   }
 
-  function onHandlePointerMove(e: ReactPointerEvent) {
+  function onRowPointerMove(e: ReactPointerEvent<HTMLLIElement>) {
     const from = dragIndexRef.current
     if (from == null) return
 
@@ -67,7 +72,7 @@ export function SortableList<T extends Item>({
     })
   }
 
-  function finishDrag(e: ReactPointerEvent) {
+  function finishDrag(e: ReactPointerEvent<HTMLLIElement>) {
     const target = e.currentTarget
     if (target.hasPointerCapture(e.pointerId)) {
       target.releasePointerCapture(e.pointerId)
@@ -81,24 +86,17 @@ export function SortableList<T extends Item>({
   }
 
   return (
-    <ul className="sortable-list" data-no-swipe>
+    <ul className="sortable-list">
       {local.map((item, index) => (
         <li
           key={item.id}
           data-sort-id={item.id}
           className={`sortable-row ${draggingId === item.id ? 'is-dragging' : ''}`}
+          onPointerDown={(e) => onRowPointerDown(e, index)}
+          onPointerMove={onRowPointerMove}
+          onPointerUp={finishDrag}
+          onPointerCancel={finishDrag}
         >
-          <button
-            type="button"
-            className="drag-handle"
-            aria-label="Sürükleyerek sırala"
-            onPointerDown={(e) => onHandlePointerDown(e, index)}
-            onPointerMove={onHandlePointerMove}
-            onPointerUp={finishDrag}
-            onPointerCancel={finishDrag}
-          >
-            ⋮⋮
-          </button>
           <div className="sortable-body">{renderItem(item, index)}</div>
         </li>
       ))}

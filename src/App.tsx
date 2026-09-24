@@ -3,12 +3,13 @@ import { AppLayout } from './components/AppLayout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './lib/auth'
 import { ThemeProvider } from './lib/theme'
-import { AgendaPage } from './pages/AgendaPage'
+import { DailyPlanPage } from './pages/DailyPlanPage'
+import { ExceptionsPage } from './pages/ExceptionsPage'
 import { LoginPage } from './pages/LoginPage'
 import { PatientDetailPage } from './pages/PatientDetailPage'
 import { PatientsPage } from './pages/PatientsPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { TodayPage } from './pages/TodayPage'
+import { WeeklyPlanPage } from './pages/WeeklyPlanPage'
 
 export default function App() {
   const basename = import.meta.env.BASE_URL.replace(/\/$/, '') || undefined
@@ -21,10 +22,12 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
-                <Route index element={<TodayPage />} />
-                <Route path="agenda" element={<AgendaPage />} />
+                <Route index element={<DailyPlanPage />} />
+                <Route path="week" element={<WeeklyPlanPage />} />
+                <Route path="agenda" element={<Navigate to="/" replace />} />
                 <Route path="patients" element={<PatientsPage />} />
                 <Route path="patients/:id" element={<PatientDetailPage />} />
+                <Route path="exceptions" element={<ExceptionsPage />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Route>
             </Route>

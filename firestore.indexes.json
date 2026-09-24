@@ -4,7 +4,7 @@
       "collectionGroup": "visits",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "date", "order": "ASCENDING" },
+        { "fieldPath": "weekday", "order": "ASCENDING" },
         { "fieldPath": "order", "order": "ASCENDING" }
       ]
     }

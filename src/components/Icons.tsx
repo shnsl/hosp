@@ -9,6 +9,16 @@ export function IconToday({ className }: { className?: string }) {
   )
 }
 
+export function IconWeek({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="1em" height="1em" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="3" y="5" width="18" height="15" rx="2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M7 14h2M11 14h2M15 14h2M7 17h2M11 17h2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function IconAgenda({ className }: { className?: string }) {
   return (
     <svg className={className} width="1em" height="1em" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -39,6 +49,16 @@ export function IconSettings({ className }: { className?: string }) {
         strokeWidth="1.8"
         strokeLinecap="round"
       />
+    </svg>
+  )
+}
+
+export function IconExceptions({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="1em" height="1em" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 7.5v5l3.2 1.9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M18.2 5.2l1.6 1.6M19.8 5.2l-1.6 1.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   )
 }

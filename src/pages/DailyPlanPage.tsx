@@ -1,13 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import {
-  IconChevronLeft,
-  IconChevronRight,
-  IconPlus,
-  IconRefresh,
-  IconToday,
-  IconTrash,
-} from '../components/Icons'
+import { Link, useSearchParams } from 'react-router-dom'
+import { IconClose, IconPlus, IconRefresh, IconRoute, IconTrash } from '../components/Icons'
 import { SortableList } from '../components/SortableList'
 import {
   DAY_START,
@@ -18,24 +11,55 @@ import {
   type ScheduleLeg,
 } from '../features/agenda/schedule'
 import { subscribePatients } from '../features/patients/api'
+import { suggestRoute, patientToAcceptWindow, timeToMinutes } from '../features/routing/optimize'
 import {
   createVisit,
   deleteVisit,
-  subscribeVisitsForDate,
+  migrateVisitsToWeekday,
+  subscribeVisitsForWeekday,
 } from '../features/visits/api'
 import { useAuth } from '../lib/auth'
-import { addDaysIso, formatDateTr, todayIsoDate } from '../lib/dates'
-import type { Patient, Visit } from '../types'
+import {
+  WEEKDAYS,
+  isWeekday,
+  todayWeekday,
+  weekdayLabel,
+  type Weekday,
+} from '../lib/dates'
+import type { LatLng, Patient, Visit } from '../types'
 
-export function AgendaPage() {
+const MIGRATE_KEY = 'hosp-visits-weekday-migrated'
+
+function initialWeekday(param: string | null): Weekday {
+  const n = Number(param)
+  if (isWeekday(n)) return n
+  return todayWeekday()
+}
+
+export function DailyPlanPage() {
   const { practiceId } = useAuth()
-  const [date, setDate] = useState(todayIsoDate())
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [weekday, setWeekday] = useState<Weekday>(() =>
+    initialWeekday(searchParams.get('day')),
+  )
   const [patients, setPatients] = useState<Patient[]>([])
   const [visits, setVisits] = useState<Visit[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [scheduling, setScheduling] = useState(false)
   const [legs, setLegs] = useState<ScheduleLeg[]>([])
+  const [startPickerOpen, setStartPickerOpen] = useState(false)
+
+  useEffect(() => {
+    const fromUrl = initialWeekday(searchParams.get('day'))
+    setWeekday(fromUrl)
+  }, [searchParams])
+
+  function selectWeekday(next: Weekday) {
+    setWeekday(next)
+    setSearchParams(next === todayWeekday() ? {} : { day: String(next) }, { replace: true })
+  }
 
   useEffect(() => {
     if (!practiceId) return
@@ -46,11 +70,30 @@ export function AgendaPage() {
 
   useEffect(() => {
     if (!practiceId) return
-    setLegs([])
-    return subscribeVisitsForDate(practiceId, date, setVisits, (e) =>
-      setError(e.message),
-    )
-  }, [practiceId, date])
+    let active = true
+    let unsub: (() => void) | undefined
+
+    void (async () => {
+      try {
+        if (localStorage.getItem(MIGRATE_KEY) !== practiceId) {
+          await migrateVisitsToWeekday(practiceId)
+          localStorage.setItem(MIGRATE_KEY, practiceId)
+        }
+      } catch {
+        /* ignore */
+      }
+      if (!active) return
+      setLegs([])
+      unsub = subscribeVisitsForWeekday(practiceId, weekday, setVisits, (e) =>
+        setError(e.message),
+      )
+    })()
+
+    return () => {
+      active = false
+      unsub?.()
+    }
+  }, [practiceId, weekday])
 
   const patientMap = useMemo(() => {
     const m = new Map<string, Patient>()
@@ -110,7 +153,7 @@ export function AgendaPage() {
         practiceId,
         {
           patientId: patient.id,
-          date,
+          weekday,
           startTime: DAY_START,
           durationMin: VISIT_DURATION_MIN,
           status: 'planned',
@@ -122,7 +165,7 @@ export function AgendaPage() {
         {
           id: newId,
           patientId: patient.id,
-          date,
+          weekday,
           startTime: DAY_START,
           order: sorted.length,
           durationMin: VISIT_DURATION_MIN,
@@ -160,47 +203,68 @@ export function AgendaPage() {
     await reschedule(next)
   }
 
+  async function optimizeOrderWithOsrm(startIndex: number) {
+    if (!practiceId || sorted.length < 2) return
+    setStartPickerOpen(false)
+    setScheduling(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const points: LatLng[] = []
+      const windows = []
+      for (const v of sorted) {
+        const p = patientMap.get(v.patientId)
+        if (!p || p.lat == null || p.lng == null) {
+          throw new Error('Tüm hastalarda konum olmalı')
+        }
+        points.push({ lat: p.lat, lng: p.lng })
+        windows.push(patientToAcceptWindow(p))
+      }
+      const suggestion = await suggestRoute(points, {
+        startIndex,
+        windows,
+        dayStartMin: timeToMinutes(DAY_START),
+        visitDurationMin: VISIT_DURATION_MIN,
+      })
+      const next = suggestion.order.map((i) => sorted[i]).filter(Boolean)
+      if (next.length !== sorted.length) {
+        throw new Error('Rota sırası uygulanamadı')
+      }
+      await reschedule(next)
+      if (suggestion.warning) {
+        setNotice(suggestion.warning)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Rota önerisi başarısız')
+      setScheduling(false)
+    }
+  }
+
   return (
     <div className="page">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Ajanda</p>
-          <h1>Plan</h1>
-          <p className="muted">{formatDateTr(date)}</p>
+          <p className="eyebrow">Plan</p>
+          <h1>Günlük plan</h1>
+          <p className="muted">
+            {weekdayLabel(weekday)} — her hafta aynı sıra
+          </p>
         </div>
       </header>
 
-      <div className="date-nav">
-        <button
-          className="btn icon-action"
-          type="button"
-          aria-label="Önceki gün"
-          onClick={() => setDate(addDaysIso(date, -1))}
-        >
-          <IconChevronLeft />
-        </button>
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          aria-label="Tarih"
-        />
-        <button
-          className="btn icon-action"
-          type="button"
-          aria-label="Sonraki gün"
-          onClick={() => setDate(addDaysIso(date, 1))}
-        >
-          <IconChevronRight />
-        </button>
-        <button
-          className="btn ghost icon-action"
-          type="button"
-          aria-label="Bugün"
-          onClick={() => setDate(todayIsoDate())}
-        >
-          <IconToday />
-        </button>
+      <div className="weekday-nav" role="tablist" aria-label="Hafta günü">
+        {WEEKDAYS.map((d) => (
+          <button
+            key={d.value}
+            type="button"
+            role="tab"
+            aria-selected={weekday === d.value}
+            className={`weekday-chip ${weekday === d.value ? 'is-active' : ''}`}
+            onClick={() => selectWeekday(d.value)}
+          >
+            {d.short}
+          </button>
+        ))}
       </div>
 
       <p className="muted small schedule-rules">
@@ -214,24 +278,42 @@ export function AgendaPage() {
           {error}
         </p>
       )}
+      {notice && (
+        <p className="warn" role="status">
+          {notice}
+        </p>
+      )}
 
       <section className="panel plan-day">
         <div className="plan-day-head">
-          <h2>Günün sırası</h2>
+          <h2>{weekdayLabel(weekday)} sırası</h2>
           {sorted.length > 0 && (
-            <button
-              className="btn icon-action"
-              type="button"
-              aria-label="Saatleri yenile"
-              disabled={scheduling}
-              onClick={() => void reschedule(sorted)}
-            >
-              <IconRefresh />
-            </button>
+            <div className="row-actions">
+              <button
+                className="btn icon-action"
+                type="button"
+                aria-label="OSRM ile en iyi sırayı uygula"
+                title="OSRM ile sırala"
+                disabled={scheduling || sorted.length < 2}
+                onClick={() => setStartPickerOpen(true)}
+              >
+                <IconRoute />
+              </button>
+              <button
+                className="btn icon-action"
+                type="button"
+                aria-label="Saatleri yenile"
+                title="Saatleri yenile"
+                disabled={scheduling}
+                onClick={() => void reschedule(sorted)}
+              >
+                <IconRefresh />
+              </button>
+            </div>
           )}
         </div>
         <p className="muted small plan-hint">
-          Sürükleyerek sırayı değiştir; saatler OSRM yol süresiyle otomatik hesaplanır.
+          Sürükleyerek sırayı değiştir; bu düzen her {weekdayLabel(weekday)} tekrarlanır.
         </p>
 
         {sorted.length === 0 ? (
@@ -308,6 +390,56 @@ export function AgendaPage() {
           </ul>
         )}
       </section>
+
+      {startPickerOpen && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => setStartPickerOpen(false)}
+        >
+          <div
+            className="modal start-picker-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="İlk hastayı seç"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="modal-header">
+              <div>
+                <p className="eyebrow">Rota</p>
+                <h2>İlk hasta kim olsun?</h2>
+                <p className="muted small">Seçtiğin hasta sabah ilk ziyaret olur</p>
+              </div>
+              <button
+                className="btn icon-action"
+                type="button"
+                aria-label="Kapat"
+                onClick={() => setStartPickerOpen(false)}
+              >
+                <IconClose />
+              </button>
+            </header>
+            <ul className="start-picker-list">
+              {sorted.map((visit, index) => {
+                const patient = patientMap.get(visit.patientId)
+                return (
+                  <li key={visit.id}>
+                    <button
+                      type="button"
+                      className="start-picker-item"
+                      disabled={scheduling || patient?.lat == null || patient?.lng == null}
+                      onClick={() => void optimizeOrderWithOsrm(index)}
+                    >
+                      <span className="week-order">{index + 1}</span>
+                      <span className="pick-name">{patient?.name ?? 'Hasta'}</span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
