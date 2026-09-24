@@ -1239,7 +1239,11 @@ html[data-theme='dark'] .weekday-chip.is-active {
 }
 
 .auth-panel .stack {
-  text-align: left;
+  text-align: center;
+}
+
+.auth-panel .stack label {
+  text-align: center;
 }
 
 .auth-panel .error {
