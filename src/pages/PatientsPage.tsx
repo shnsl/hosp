@@ -123,7 +123,9 @@ export function PatientsPage() {
         <div>
           <p className="eyebrow">Hastalar</p>
           <h1>Liste</h1>
-          <p className="muted">{patients.length} kayıt</p>
+          <p className="muted">
+            {patients.length} kayıt · haftada {visits.length} seans
+          </p>
         </div>
         <button
           className="btn primary icon-action"

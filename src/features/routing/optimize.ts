@@ -1,4 +1,4 @@
-import type { AcceptWindowMin, LatLng, RouteSuggestion } from '../../types'
+import type { AcceptWindowMin, LatLng, RouteSuggestion, Weekday } from '../../types'
 import { fetchDistanceMatrix, legsAlongOrder, type DistanceMatrix } from './matrix'
 
 /** Süre (dk) + mesafe (km) ile sırala; yakın adresler ayırt edilsin */
@@ -288,10 +288,17 @@ export function addMinutesToTime(hhmm: string, minutes: number): string {
   return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`
 }
 
-export function patientToAcceptWindow(patient: {
-  acceptFrom?: string | null
-  acceptTo?: string | null
-}): AcceptWindowMin {
+export function patientToAcceptWindow(
+  patient: {
+    acceptFrom?: string | null
+    acceptTo?: string | null
+  },
+  weekday?: Weekday,
+): AcceptWindowMin {
+  // Cumartesi (6): kısıt uygulanmaz
+  if (weekday === 6) {
+    return { fromMin: null, toMin: null }
+  }
   return {
     fromMin: patient.acceptFrom ? timeToMinutes(patient.acceptFrom) : null,
     toMin: patient.acceptTo ? timeToMinutes(patient.acceptTo) : null,

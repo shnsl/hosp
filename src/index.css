@@ -55,6 +55,211 @@ html[data-theme='dark'] {
   --success-border: #3d6a62;
 }
 
+/* —— Renk paletleri (açık) —— */
+html[data-accent='blue'] {
+  --bg: #e8eef5;
+  --bg-accent: #d0dceb;
+  --bg-top: #f1f5fa;
+  --bg-bottom: #dce5f0;
+  --glow: rgba(31, 111, 171, 0.14);
+  --line: #c2cfe0;
+  --muted: #5a6d82;
+  --brand: #1f6fab;
+  --brand-strong: #154e7a;
+  --success-bg: #e4eef8;
+  --success-border: #9bb8d4;
+}
+
+html[data-accent='green'] {
+  --bg: #e9f2eb;
+  --bg-accent: #d2e5d7;
+  --bg-top: #f2f8f3;
+  --bg-bottom: #ddeee2;
+  --glow: rgba(47, 122, 69, 0.14);
+  --line: #c2d6c8;
+  --muted: #5a7260;
+  --brand: #2f7a45;
+  --brand-strong: #1f5630;
+  --success-bg: #e5f3ea;
+  --success-border: #9ccbAA;
+}
+
+html[data-accent='coral'] {
+  --bg: #f5ebe8;
+  --bg-accent: #ead7d1;
+  --bg-top: #faf3f1;
+  --bg-bottom: #eddfe0;
+  --glow: rgba(196, 90, 58, 0.14);
+  --line: #e0ccc5;
+  --muted: #7a5f58;
+  --brand: #c45a3a;
+  --brand-strong: #9a3f26;
+  --success-bg: #f3ebe8;
+  --success-border: #d4b0a4;
+}
+
+html[data-accent='amber'] {
+  --bg: #f4efe6;
+  --bg-accent: #e8dcc8;
+  --bg-top: #faf6ee;
+  --bg-bottom: #ebe2d2;
+  --glow: rgba(176, 122, 26, 0.14);
+  --line: #ddd0b8;
+  --muted: #73634a;
+  --brand: #b07a1a;
+  --brand-strong: #845910;
+  --success-bg: #f3ecdf;
+  --success-border: #d4c29a;
+}
+
+html[data-accent='slate'] {
+  --bg: #eceff2;
+  --bg-accent: #d5dbe2;
+  --bg-top: #f4f6f8;
+  --bg-bottom: #e0e5ea;
+  --glow: rgba(74, 93, 110, 0.14);
+  --line: #c5ced6;
+  --muted: #5c6a76;
+  --brand: #4a5d6e;
+  --brand-strong: #334352;
+  --success-bg: #e8eef2;
+  --success-border: #a8b6c2;
+}
+
+html[data-accent='rose'] {
+  --bg: #f5e9ee;
+  --bg-accent: #e8d2db;
+  --bg-top: #faf2f5;
+  --bg-bottom: #eddde4;
+  --glow: rgba(168, 72, 104, 0.14);
+  --line: #dfc5d0;
+  --muted: #7a5564;
+  --brand: #a84868;
+  --brand-strong: #7c314c;
+  --success-bg: #f3e8ed;
+  --success-border: #d4a8b8;
+}
+
+html[data-accent='indigo'] {
+  --bg: #eaecf5;
+  --bg-accent: #d4d8ea;
+  --bg-top: #f3f4fa;
+  --bg-bottom: #dde0ef;
+  --glow: rgba(61, 79, 143, 0.14);
+  --line: #c5cadf;
+  --muted: #5a6180;
+  --brand: #3d4f8f;
+  --brand-strong: #2a3868;
+  --success-bg: #e8ebf5;
+  --success-border: #a8b0d0;
+}
+
+/* —— Renk paletleri (koyu) —— */
+html[data-theme='dark'][data-accent='blue'] {
+  --bg: #10151c;
+  --bg-accent: #1a2432;
+  --bg-top: #141b24;
+  --bg-bottom: #0c1016;
+  --glow: rgba(109, 180, 232, 0.12);
+  --surface: #17202a;
+  --line: #2d3c4d;
+  --muted: #95a8bd;
+  --brand: #6db4e8;
+  --brand-strong: #9accf0;
+  --success-bg: #1a2836;
+  --success-border: #3d5a78;
+}
+
+html[data-theme='dark'][data-accent='green'] {
+  --bg: #101814;
+  --bg-accent: #1a2a20;
+  --bg-top: #142018;
+  --bg-bottom: #0c120e;
+  --glow: rgba(111, 191, 132, 0.12);
+  --surface: #17241c;
+  --line: #2d4336;
+  --muted: #95b5a0;
+  --brand: #6fbf84;
+  --brand-strong: #97d4a7;
+  --success-bg: #1a3224;
+  --success-border: #3d6a4e;
+}
+
+html[data-theme='dark'][data-accent='coral'] {
+  --bg: #1a1210;
+  --bg-accent: #2a1c18;
+  --bg-top: #221816;
+  --bg-bottom: #120c0b;
+  --glow: rgba(232, 144, 118, 0.12);
+  --surface: #241a17;
+  --line: #4a322c;
+  --muted: #b59a92;
+  --brand: #e89076;
+  --brand-strong: #f0b09c;
+  --success-bg: #32241f;
+  --success-border: #6a4a40;
+}
+
+html[data-theme='dark'][data-accent='amber'] {
+  --bg: #18140c;
+  --bg-accent: #2a2418;
+  --bg-top: #201c12;
+  --bg-bottom: #120e08;
+  --glow: rgba(224, 180, 92, 0.12);
+  --surface: #242014;
+  --line: #4a4030;
+  --muted: #b5a88a;
+  --brand: #e0b45c;
+  --brand-strong: #ecd090;
+  --success-bg: #322a1a;
+  --success-border: #6a5a38;
+}
+
+html[data-theme='dark'][data-accent='slate'] {
+  --bg: #12161a;
+  --bg-accent: #1e262e;
+  --bg-top: #181e24;
+  --bg-bottom: #0c1014;
+  --glow: rgba(155, 176, 194, 0.12);
+  --surface: #1a222a;
+  --line: #35424e;
+  --muted: #9aabba;
+  --brand: #9bb0c2;
+  --brand-strong: #c0d0dc;
+  --success-bg: #222a32;
+  --success-border: #4a5a6a;
+}
+
+html[data-theme='dark'][data-accent='rose'] {
+  --bg: #1a1216;
+  --bg-accent: #2a1c22;
+  --bg-top: #22181c;
+  --bg-bottom: #120c10;
+  --glow: rgba(224, 155, 180, 0.12);
+  --surface: #241820;
+  --line: #4a3040;
+  --muted: #b598a8;
+  --brand: #e09bb4;
+  --brand-strong: #f0bfd0;
+  --success-bg: #322028;
+  --success-border: #6a4050;
+}
+
+html[data-theme='dark'][data-accent='indigo'] {
+  --bg: #12141c;
+  --bg-accent: #1e2230;
+  --bg-top: #181a24;
+  --bg-bottom: #0c0e14;
+  --glow: rgba(154, 171, 223, 0.12);
+  --surface: #1a1e2a;
+  --line: #343a52;
+  --muted: #9aa3c0;
+  --brand: #9aabdf;
+  --brand-strong: #c0caf0;
+  --success-bg: #22263a;
+  --success-border: #4a5270;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -277,6 +482,48 @@ textarea {
   display: grid;
   gap: 0.85rem;
   justify-items: center;
+}
+
+.accent-label {
+  margin: 1rem 0 0.5rem;
+}
+
+.accent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+  gap: 0.55rem;
+}
+
+.accent-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.65rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+}
+
+.accent-swatch-dot {
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 999px;
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.accent-swatch-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.accent-swatch.is-active {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 35%, transparent);
 }
 
 .stack {

@@ -104,7 +104,8 @@ export function ExceptionsPage() {
       </header>
 
       <p className="muted small">
-        Boş bırakılan hastalar her saatte kabul eder. Otomatik sıralama bu aralıklara uyar.
+        Boş bırakılan hastalar her saatte kabul eder. Kısıtlar yalnızca hafta içi (Pzt–Cum)
+        geçerlidir; Cumartesi uygulanmaz.
       </p>
 
       {error && (

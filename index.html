@@ -21,7 +21,21 @@
               ? 'dark'
               : 'light'
           }
-          var color = theme === 'dark' ? '#4eb8bb' : '#0f6568'
+          var accent = localStorage.getItem('hosp-accent') || 'teal'
+          document.documentElement.setAttribute('data-theme', theme)
+          document.documentElement.setAttribute('data-accent', accent)
+          var colors = {
+            teal: { light: '#0f6568', dark: '#4eb8bb' },
+            blue: { light: '#1f6fab', dark: '#6db4e8' },
+            green: { light: '#2f7a45', dark: '#6fbf84' },
+            coral: { light: '#c45a3a', dark: '#e89076' },
+            amber: { light: '#b07a1a', dark: '#e0b45c' },
+            slate: { light: '#4a5d6e', dark: '#9bb0c2' },
+            rose: { light: '#a84868', dark: '#e09bb4' },
+            indigo: { light: '#3d4f8f', dark: '#9aabdf' },
+          }
+          var pair = colors[accent] || colors.teal
+          var color = theme === 'dark' ? pair.dark : pair.light
           var meta = document.querySelector('meta[name="theme-color"]')
           if (meta) meta.setAttribute('content', color)
         } catch (e) {}

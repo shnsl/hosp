@@ -148,6 +148,20 @@ export function DailyPlanPage() {
     return m
   }, [legs])
 
+  const daySummary = useMemo(() => {
+    if (sorted.length === 0) return null
+    const active = sorted.filter(
+      (v) => effectiveVisitStatus(v, weekday) !== 'cancelled',
+    )
+    const last = active[active.length - 1]
+    return {
+      end: last
+        ? endTimeOf(last.startTime, last.durationMin || VISIT_DURATION_MIN)
+        : null,
+      count: sorted.length,
+    }
+  }, [sorted, weekday])
+
   async function reschedule(ordered: Visit[]) {
     if (!practiceId) return
     if (ordered.length === 0) {
@@ -355,7 +369,7 @@ export function DailyPlanPage() {
           throw new Error('Tüm hastalarda konum olmalı')
         }
         points.push({ lat: p.lat, lng: p.lng })
-        windows.push(patientToAcceptWindow(p))
+        windows.push(patientToAcceptWindow(p, weekday))
       }
       const suggestion = await suggestRoute(points, {
         startIndex,
@@ -406,7 +420,19 @@ export function DailyPlanPage() {
 
       <p className="muted small schedule-rules">
         İlk hasta <strong>{DAY_START}</strong> · her hastada{' '}
-        <strong>{VISIT_DURATION_MIN} dk</strong> · ara yol süresi OSRM (araç)
+        <strong>{VISIT_DURATION_MIN} dk</strong>
+        {daySummary ? (
+          <>
+            {daySummary.end ? (
+              <>
+                {' '}
+                · tahmini bitiş <strong>{daySummary.end}</strong>
+              </>
+            ) : null}
+            {' '}
+            · <strong>{daySummary.count}</strong> hasta
+          </>
+        ) : null}
         {scheduling ? ' · hesaplanıyor…' : ''}
       </p>
 

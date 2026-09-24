@@ -7,49 +7,71 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import {
+  accentThemeColor,
+  isAccentId,
+  type AccentId,
+} from './accents'
 
 type Theme = 'light' | 'dark'
 
 interface ThemeContextValue {
   theme: Theme
+  accent: AccentId
   toggleTheme: () => void
   setTheme: (theme: Theme) => void
+  setAccent: (accent: AccentId) => void
 }
 
-const STORAGE_KEY = 'hosp-theme'
+const THEME_KEY = 'hosp-theme'
+const ACCENT_KEY = 'hosp-accent'
 const ThemeContext = createContext<ThemeContextValue | null>(null)
 
 function readStoredTheme(): Theme {
-  const stored = localStorage.getItem(STORAGE_KEY)
+  const stored = localStorage.getItem(THEME_KEY)
   if (stored === 'dark' || stored === 'light') return stored
   if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark'
   return 'light'
 }
 
-function applyTheme(theme: Theme) {
+function readStoredAccent(): AccentId {
+  const stored = localStorage.getItem(ACCENT_KEY)
+  if (isAccentId(stored)) return stored
+  return 'teal'
+}
+
+export function applyTheme(theme: Theme, accent: AccentId) {
   document.documentElement.setAttribute('data-theme', theme)
+  document.documentElement.setAttribute('data-accent', accent)
   document.documentElement.style.colorScheme = theme
   const meta = document.querySelector('meta[name="theme-color"]')
   if (meta) {
-    meta.setAttribute('content', theme === 'dark' ? '#4eb8bb' : '#0f6568')
+    meta.setAttribute('content', accentThemeColor(accent, theme))
   }
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     if (typeof window === 'undefined') return 'light'
-    const initial = readStoredTheme()
-    applyTheme(initial)
-    return initial
+    return readStoredTheme()
+  })
+  const [accent, setAccentState] = useState<AccentId>(() => {
+    if (typeof window === 'undefined') return 'teal'
+    return readStoredAccent()
   })
 
   useEffect(() => {
-    applyTheme(theme)
-    localStorage.setItem(STORAGE_KEY, theme)
-  }, [theme])
+    applyTheme(theme, accent)
+    localStorage.setItem(THEME_KEY, theme)
+    localStorage.setItem(ACCENT_KEY, accent)
+  }, [theme, accent])
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next)
+  }, [])
+
+  const setAccent = useCallback((next: AccentId) => {
+    setAccentState(next)
   }, [])
 
   const toggleTheme = useCallback(() => {
@@ -57,8 +79,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ theme, toggleTheme, setTheme }),
-    [theme, toggleTheme, setTheme],
+    () => ({ theme, accent, toggleTheme, setTheme, setAccent }),
+    [theme, accent, toggleTheme, setTheme, setAccent],
   )
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
