@@ -144,7 +144,7 @@ export function PatientsPage() {
 
       {showForm && (
         <section className="panel">
-          <h2>{editingId ? 'Hastayı düzenle' : 'Yeni hasta'}</h2>
+          <h2>{editingId ? 'Hastayı Düzenle' : 'Yeni Hasta'}</h2>
           <form className="stack" onSubmit={(e) => void onSubmit(e)}>
             <label>
               Ad soyad

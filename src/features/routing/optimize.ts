@@ -1,10 +1,18 @@
 import type { AcceptWindowMin, LatLng, RouteSuggestion } from '../../types'
 import { fetchDistanceMatrix, legsAlongOrder, type DistanceMatrix } from './matrix'
 
-function pathCost(order: number[], durationMin: number[][]): number {
+/** Süre (dk) + mesafe (km) ile sırala; yakın adresler ayırt edilsin */
+function pathCost(
+  order: number[],
+  durationMin: number[][],
+  distanceKm?: number[][],
+): number {
   let cost = 0
   for (let i = 0; i < order.length - 1; i++) {
-    cost += durationMin[order[i]][order[i + 1]]
+    const a = order[i]
+    const b = order[i + 1]
+    cost += durationMin[a][b]
+    if (distanceKm) cost += distanceKm[a][b] * 0.01
   }
   return cost
 }
@@ -16,8 +24,7 @@ export function timeToMinutes(hhmm: string): number {
 
 /**
  * Sırayı simüle eder: erken varışta acceptFrom’a kadar bekler.
- * Kabul penceresi dışı başlangıç → sonsuz ceza.
- * Dönen skor: toplam araç süresi + bekleme (dakika).
+ * Kabul penceresi dışı başlangıç → büyük ceza.
  */
 function scheduleScore(
   order: number[],
@@ -25,6 +32,7 @@ function scheduleScore(
   windows: AcceptWindowMin[] | undefined,
   dayStartMin: number,
   visitDurationMin: number,
+  distanceKm?: number[][],
 ): { score: number; feasible: boolean } {
   let t = dayStartMin
   let waitTotal = 0
@@ -45,14 +53,14 @@ function scheduleScore(
     }
   }
 
-  const drive = pathCost(order, durationMin)
+  const drive = pathCost(order, durationMin, distanceKm)
   if (!feasible) {
     return { score: drive + waitTotal + 100_000, feasible: false }
   }
   return { score: drive + waitTotal, feasible: true }
 }
 
-function nearestNeighbor(durationMin: number[][], start = 0): number[] {
+function nearestNeighbor(durationMin: number[][], start = 0, distanceKm?: number[][]): number[] {
   const n = durationMin.length
   const remaining = new Set(Array.from({ length: n }, (_, i) => i))
   const order: number[] = [start]
@@ -63,7 +71,7 @@ function nearestNeighbor(durationMin: number[][], start = 0): number[] {
     let best = -1
     let bestCost = Number.POSITIVE_INFINITY
     for (const j of remaining) {
-      const c = durationMin[last][j]
+      const c = durationMin[last][j] + (distanceKm ? distanceKm[last][j] * 0.01 : 0)
       if (c < bestCost) {
         bestCost = c
         best = j
@@ -81,17 +89,32 @@ function twoOpt(
   windows: AcceptWindowMin[] | undefined,
   dayStartMin: number,
   visitDurationMin: number,
+  distanceKm?: number[][],
 ): number[] {
   let best = [...order]
-  let bestScore = scheduleScore(best, durationMin, windows, dayStartMin, visitDurationMin).score
+  let bestScore = scheduleScore(
+    best,
+    durationMin,
+    windows,
+    dayStartMin,
+    visitDurationMin,
+    distanceKm,
+  ).score
   let improved = true
   while (improved) {
     improved = false
-    for (let i = 1; i < best.length - 2; i++) {
-      for (let k = i + 1; k < best.length - 1; k++) {
+    for (let i = 1; i < best.length - 1; i++) {
+      for (let k = i + 1; k < best.length; k++) {
         const next = best.slice(0, i).concat(best.slice(i, k + 1).reverse(), best.slice(k + 1))
-        const s = scheduleScore(next, durationMin, windows, dayStartMin, visitDurationMin).score
-        if (s + 0.01 < bestScore) {
+        const s = scheduleScore(
+          next,
+          durationMin,
+          windows,
+          dayStartMin,
+          visitDurationMin,
+          distanceKm,
+        ).score
+        if (s + 1e-6 < bestScore) {
           best = next
           bestScore = s
           improved = true
@@ -108,30 +131,40 @@ function bruteForceBestFromStart(
   windows: AcceptWindowMin[] | undefined,
   dayStartMin: number,
   visitDurationMin: number,
+  distanceKm?: number[][],
 ): { order: number[]; feasible: boolean } {
   const n = durationMin.length
   const rest = Array.from({ length: n }, (_, i) => i).filter((i) => i !== start)
   let best = [start, ...rest]
-  let bestScore = scheduleScore(best, durationMin, windows, dayStartMin, visitDurationMin)
-  let foundFeasible = bestScore.feasible
+  let bestScore = scheduleScore(
+    best,
+    durationMin,
+    windows,
+    dayStartMin,
+    visitDurationMin,
+    distanceKm,
+  )
 
   function permute(arr: number[], at: number) {
-    if (at === arr.length - 1) {
+    if (at === arr.length) {
       const order = [start, ...arr]
-      const scored = scheduleScore(order, durationMin, windows, dayStartMin, visitDurationMin)
-      if (scored.feasible && !foundFeasible) {
-        foundFeasible = true
+      const scored = scheduleScore(
+        order,
+        durationMin,
+        windows,
+        dayStartMin,
+        visitDurationMin,
+        distanceKm,
+      )
+      // Önce uygun olanlar; eşitlikte daha düşük skor
+      if (scored.feasible && !bestScore.feasible) {
         best = order
         bestScore = scored
         return
       }
-      if (scored.feasible === foundFeasible && scored.score + 0.01 < bestScore.score) {
+      if (scored.feasible === bestScore.feasible && scored.score + 1e-6 < bestScore.score) {
         best = order
         bestScore = scored
-      } else if (scored.feasible && !bestScore.feasible) {
-        best = order
-        bestScore = scored
-        foundFeasible = true
       }
       return
     }
@@ -158,18 +191,33 @@ function optimizeOrder(
     return { order: Array.from({ length: n }, (_, i) => i), feasible: true }
   }
   const start = Math.max(0, Math.min(startIndex, n - 1))
-  if (n <= 8) {
+  if (n <= 9) {
     return bruteForceBestFromStart(
       matrix.durationMin,
       start,
       windows,
       dayStartMin,
       visitDurationMin,
+      matrix.distanceKm,
     )
   }
-  const nn = nearestNeighbor(matrix.durationMin, start)
-  const order = twoOpt(nn, matrix.durationMin, windows, dayStartMin, visitDurationMin)
-  const scored = scheduleScore(order, matrix.durationMin, windows, dayStartMin, visitDurationMin)
+  const nn = nearestNeighbor(matrix.durationMin, start, matrix.distanceKm)
+  const order = twoOpt(
+    nn,
+    matrix.durationMin,
+    windows,
+    dayStartMin,
+    visitDurationMin,
+    matrix.distanceKm,
+  )
+  const scored = scheduleScore(
+    order,
+    matrix.durationMin,
+    windows,
+    dayStartMin,
+    visitDurationMin,
+    matrix.distanceKm,
+  )
   return { order, feasible: scored.feasible }
 }
 

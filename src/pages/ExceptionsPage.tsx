@@ -99,7 +99,7 @@ export function ExceptionsPage() {
         <div>
           <p className="eyebrow">Kurallar</p>
           <h1>İstisnalar</h1>
-          <p className="muted">Hastanın tedavi kabul ettiği saat aralığı</p>
+          <p className="muted">Hastanın Tedavi Kabul Ettiği Saat Aralığı</p>
         </div>
       </header>
 

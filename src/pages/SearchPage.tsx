@@ -64,12 +64,12 @@ export function SearchPage() {
         <div>
           <p className="eyebrow">Hastalar</p>
           <h1>Ara</h1>
-          <p className="muted">İsme göre anında bul</p>
+          <p className="muted">İsme Göre Anında Bul</p>
         </div>
       </header>
 
       <label className="search-field">
-        Hasta adı
+        Hasta Adı
         <input
           ref={inputRef}
           type="search"

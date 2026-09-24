@@ -53,6 +53,30 @@ export function IconSettings({ className }: { className?: string }) {
   )
 }
 
+export function IconFinishDay({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="1em" height="1em" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M8.2 12.2l2.4 2.4 5.2-5.4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+export function IconTracking({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="1em" height="1em" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M3.5 9h17M9 9v10.5M15 9v10.5" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  )
+}
+
 export function IconSearch({ className }: { className?: string }) {
   return (
     <svg className={className} width="1em" height="1em" viewBox="0 0 24 24" fill="none" aria-hidden>

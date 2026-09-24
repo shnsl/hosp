@@ -56,7 +56,7 @@ export function SettingsPage() {
       </section>
 
       <section className="panel">
-        <h2>Şifre değiştir</h2>
+        <h2>Şifre Değiştir</h2>
         <p className="muted small">İlk kurulum şifresi: {DEFAULT_PIN}</p>
         <form className="stack" onSubmit={(e) => void onChangePin(e)}>
           <label>

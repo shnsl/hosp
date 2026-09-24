@@ -5,6 +5,7 @@ import {
   IconPatients,
   IconSearch,
   IconSettings,
+  IconTracking,
   IconWeek,
 } from './Icons'
 
@@ -17,14 +18,17 @@ export function AppLayout() {
           AJAN
         </Link>
         <nav className="nav" aria-label="Ana menü">
-          <NavLink to="/" end title="Günlük plan" aria-label="Günlük plan">
+          <NavLink to="/" end title="Günlük Plan" aria-label="Günlük Plan">
             <IconAgenda />
           </NavLink>
-          <NavLink to="/week" title="Haftalık plan" aria-label="Haftalık plan">
+          <NavLink to="/week" title="Haftalık Plan" aria-label="Haftalık Plan">
             <IconWeek />
           </NavLink>
           <NavLink to="/patients" title="Hastalar" aria-label="Hastalar">
             <IconPatients />
+          </NavLink>
+          <NavLink to="/tracking" title="Özet" aria-label="Özet">
+            <IconTracking />
           </NavLink>
           <NavLink to="/search" title="Ara" aria-label="Ara">
             <IconSearch />

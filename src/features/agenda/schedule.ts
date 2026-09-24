@@ -78,14 +78,15 @@ export async function buildDaySchedule(
     activeTimes.set(v.id, { startTime: time, durationMin: VISIT_DURATION_MIN })
 
     if (i < active.length - 1) {
-      const drive = durationMinMatrix[i][i + 1]
+      const driveRaw = durationMinMatrix[i][i + 1]
       const km = distanceKmMatrix[i][i + 1]
-      if (!Number.isFinite(drive) || !Number.isFinite(km)) {
+      if (!Number.isFinite(driveRaw) || !Number.isFinite(km)) {
         throw new Error('Araç rotası hesaplanamadı (OSRM)')
       }
+      const drive = Math.max(1, Math.round(driveRaw))
       legs.push({
         afterVisitId: v.id,
-        distanceKm: km,
+        distanceKm: Math.round(km * 10) / 10,
         durationMin: drive,
       })
       time = addMinutesToTime(time, VISIT_DURATION_MIN + drive)

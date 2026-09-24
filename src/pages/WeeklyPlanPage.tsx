@@ -71,8 +71,8 @@ export function WeeklyPlanPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">Plan</p>
-          <h1>Haftalık plan</h1>
-          <p className="muted">Pazartesi – Cumartesi hasta sırası</p>
+          <h1>Haftalık Plan</h1>
+          <p className="muted">Pazartesi – Cumartesi Hasta Sırası</p>
         </div>
       </header>
 

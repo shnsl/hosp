@@ -10,6 +10,7 @@ import { PatientDetailPage } from './pages/PatientDetailPage'
 import { PatientsPage } from './pages/PatientsPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { TrackingPage } from './pages/TrackingPage'
 import { WeeklyPlanPage } from './pages/WeeklyPlanPage'
 
 export default function App() {
@@ -29,6 +30,7 @@ export default function App() {
                 <Route path="patients" element={<PatientsPage />} />
                 <Route path="patients/:id" element={<PatientDetailPage />} />
                 <Route path="search" element={<SearchPage />} />
+                <Route path="tracking" element={<TrackingPage />} />
                 <Route path="exceptions" element={<ExceptionsPage />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Route>

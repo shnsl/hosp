@@ -116,7 +116,7 @@ export function MapPickerModal({ open, initialCoords, onClose, onPick }: Props) 
         <header className="modal-header">
           <div>
             <p className="eyebrow">Konum</p>
-            <h2>Haritadan seç</h2>
+            <h2>Haritadan Seç</h2>
             <p className="muted small">Haritaya dokun → pin düşer → onayla</p>
           </div>
           <button className="btn icon-action" type="button" aria-label="Kapat" onClick={onClose}>

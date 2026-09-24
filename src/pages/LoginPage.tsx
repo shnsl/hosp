@@ -60,8 +60,8 @@ export function LoginPage() {
           />
         </div>
         <p className="eyebrow">AJAN</p>
-        <h1>Giriş yap</h1>
-        <p className="muted">Şifreni gir.</p>
+        <h1>Giriş Yap</h1>
+        <p className="muted">Şifreni Gir.</p>
 
         <form className="stack" onSubmit={onSubmit}>
           <label>
@@ -94,7 +94,7 @@ export function LoginPage() {
             type="submit"
             disabled={submitting || pin.length === 0}
           >
-            {submitting ? 'Bekle…' : 'Giriş yap'}
+            {submitting ? 'Bekle…' : 'Giriş Yap'}
           </button>
         </form>
       </div>

@@ -65,14 +65,55 @@ export function addDaysIso(isoDate: string, days: number): string {
   return todayIsoDate(date)
 }
 
-/** Bu haftanın verilen gününün YYYY-MM-DD değeri (Pzt=1…Cmt=6) */
-export function occurrenceIsoForWeekday(weekday: Weekday, now = new Date()): string {
+function weekMonday(now: Date, weekOffset: number): Date {
   const jsDay = now.getDay()
   const mondayOffset = jsDay === 0 ? -6 : 1 - jsDay
   const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset)
+  monday.setDate(monday.getDate() + weekOffset * 7)
+  return monday
+}
+
+/** weekOffset: 0 bu hafta, -1 geçen hafta */
+export function occurrenceIsoForWeekdayOffset(
+  weekday: Weekday,
+  weekOffset: number,
+  now = new Date(),
+): string {
+  const monday = weekMonday(now, weekOffset)
   return todayIsoDate(
     new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + (weekday - 1)),
   )
+}
+
+/** Bu haftanın verilen gününün YYYY-MM-DD değeri (Pzt=1…Cmt=6) */
+export function occurrenceIsoForWeekday(weekday: Weekday, now = new Date()): string {
+  return occurrenceIsoForWeekdayOffset(weekday, 0, now)
+}
+
+/** 2026-09-24 → 24-09 */
+export function formatDayMonth(isoDate: string): string {
+  const [, m, d] = isoDate.split('-')
+  if (!m || !d) return isoDate
+  return `${d}-${m}`
+}
+
+export type WeekDayColumn = {
+  weekday: Weekday
+  iso: string
+  label: string
+  short: string
+}
+
+export function weekDayColumns(weekOffset: number, now = new Date()): WeekDayColumn[] {
+  return WEEKDAYS.map((d) => {
+    const iso = occurrenceIsoForWeekdayOffset(d.value, weekOffset, now)
+    return {
+      weekday: d.value,
+      iso,
+      label: formatDayMonth(iso),
+      short: d.short,
+    }
+  })
 }
 
 /** Şablon ziyaretinde bu haftanın alındı/iptal işareti */

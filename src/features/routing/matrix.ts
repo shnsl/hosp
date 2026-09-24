@@ -44,13 +44,12 @@ export async function fetchDistanceMatrix(
 
   const distanceKm = data.distances.map((row) =>
     row.map((m) =>
-      m == null ? Number.POSITIVE_INFINITY : Math.round((m / 1000) * 10) / 10,
+      m == null ? Number.POSITIVE_INFINITY : Math.round((m / 1000) * 100) / 100,
     ),
   )
+  // Optimizasyon için saniye hassasiyeti (dakikaya yuvarlama yakın noktaları eşitlemesin)
   const durationMin = data.durations.map((row) =>
-    row.map((s) =>
-      s == null ? Number.POSITIVE_INFINITY : Math.max(1, Math.round(s / 60)),
-    ),
+    row.map((s) => (s == null ? Number.POSITIVE_INFINITY : s / 60)),
   )
 
   return { distanceKm, durationMin, source: 'osrm' }
