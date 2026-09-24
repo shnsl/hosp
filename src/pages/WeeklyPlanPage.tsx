@@ -66,12 +66,21 @@ export function WeeklyPlanPage() {
     return map
   }, [visits])
 
+  const totalSessions = useMemo(() => {
+    let n = 0
+    for (const list of byWeekday.values()) n += list.length
+    return n
+  }, [byWeekday])
+
   return (
     <div className="page">
       <header className="page-header">
         <div>
           <p className="eyebrow">Plan</p>
-          <h1>Haftalık Plan</h1>
+          <h1>
+            Haftalık Plan
+            <span className="muted week-total-count"> · {totalSessions} seans</span>
+          </h1>
           <p className="muted">Pazartesi – Cumartesi Hasta Sırası</p>
         </div>
       </header>
@@ -88,7 +97,10 @@ export function WeeklyPlanPage() {
           return (
             <section key={d.value} className="panel week-day-card">
               <div className="week-day-head">
-                <h2>{d.long}</h2>
+                <h2>
+                  {d.long}
+                  <span className="muted week-day-count"> · {dayVisits.length}</span>
+                </h2>
                 <Link
                   className="btn ghost compact"
                   to={`/?day=${d.value}`}

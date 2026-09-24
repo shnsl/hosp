@@ -450,7 +450,7 @@ export function DailyPlanPage() {
       <section className="panel plan-day">
         <div className="plan-day-head">
           <h2>
-            {weekdayLabel(weekday)} sırası
+            {weekdayLabel(weekday)} Listesi
             {sorted.length > 0 ? (
               <span className="plan-day-stats muted">
                 {' '}

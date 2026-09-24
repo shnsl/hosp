@@ -14,7 +14,13 @@ export function AppLayout() {
     <div className="app-shell">
       <header className="topbar">
         <Link to="/" className="brand" aria-label="AJAN">
-          <span className="brand-mark">A</span>
+          <img
+            className="brand-mark"
+            src={`${import.meta.env.BASE_URL}pwa-192.png`}
+            alt=""
+            width={28}
+            height={28}
+          />
           AJAN
         </Link>
         <nav className="nav" aria-label="Ana menü">

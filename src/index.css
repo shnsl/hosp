@@ -387,14 +387,12 @@ textarea {
 }
 
 .brand-mark {
-  display: inline-grid;
-  place-items: center;
+  display: block;
   width: 1.7rem;
   height: 1.7rem;
   border-radius: 9px;
-  background: color-mix(in srgb, var(--brand) 18%, transparent);
-  color: var(--brand-strong);
-  font-size: 0.95rem;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 .nav {
@@ -679,14 +677,32 @@ html[data-theme='dark'] .weekday-chip.is-active {
 }
 
 .week-grid {
-  display: grid;
+  display: flex;
+  flex-wrap: nowrap;
   gap: 0.85rem;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  padding-bottom: 0.35rem;
+}
+
+.week-day-card {
+  flex: 0 0 min(280px, 82vw);
+  scroll-snap-align: start;
 }
 
 .week-day-card h2 {
   margin: 0;
   font-size: 1.05rem;
+}
+
+.week-day-count {
+  font-weight: 500;
+}
+
+.week-total-count {
+  font-weight: 500;
+  font-size: 0.75em;
 }
 
 .week-day-head {
