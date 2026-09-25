@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { IconCheck, IconClose } from '../components/Icons'
+import { useConfirm } from '../components/useConfirm'
 import {
   subscribePatients,
   updatePatientAcceptWindow,
@@ -30,6 +31,7 @@ function draftsFromPatients(patients: Patient[]): Record<string, Draft> {
 
 export function ExceptionsPage() {
   const { practiceId } = useAuth()
+  const { confirm, dialog: confirmDialog } = useConfirm()
   const [patients, setPatients] = useState<Patient[]>([])
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [error, setError] = useState<string | null>(null)
@@ -76,6 +78,12 @@ export function ExceptionsPage() {
 
   async function clearPatient(patient: Patient) {
     if (!practiceId) return
+    const ok = await confirm({
+      title: 'Kısıtı kaldır',
+      message: `“${patient.name}” için saat kısıtı silinsin mi?`,
+      confirmLabel: 'Sil',
+    })
+    if (!ok) return
     setBusyId(patient.id)
     setError(null)
     setMessage(null)
@@ -195,6 +203,7 @@ export function ExceptionsPage() {
           })}
         </ul>
       )}
+      {confirmDialog}
     </div>
   )
 }

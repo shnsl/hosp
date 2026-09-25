@@ -1,10 +1,19 @@
-import type { LatLng, Patient, Visit } from '../../types'
+import type { LatLng, Patient, Visit, Weekday } from '../../types'
+import { db } from '../../lib/firebase'
+import { collection, getDocs } from 'firebase/firestore'
+import { WEEKDAYS } from '../../lib/dates'
 import { fetchDistanceMatrix } from '../routing/matrix'
 import { addMinutesToTime } from '../routing/optimize'
 import { applyVisitOrderAndTimes } from '../visits/api'
+import {
+  DEFAULT_DAY_START,
+  DEFAULT_VISIT_DURATION_MIN,
+  timingForWeekday,
+  type DayScheduleSettings,
+} from './daySettings'
 
-export const DAY_START = '08:45'
-export const VISIT_DURATION_MIN = 30
+export const DAY_START = DEFAULT_DAY_START
+export const VISIT_DURATION_MIN = DEFAULT_VISIT_DURATION_MIN
 
 export type ScheduleLeg = {
   afterVisitId: string
@@ -17,19 +26,28 @@ export type DaySchedule = {
   legs: ScheduleLeg[]
 }
 
+export type BuildDayScheduleOptions = {
+  skipVisitIds?: ReadonlySet<string>
+  dayStart?: string
+  visitDurationMin?: number
+}
+
 export function endTimeOf(startTime: string, durationMin = VISIT_DURATION_MIN): string {
   return addMinutesToTime(startTime, durationMin)
 }
 
 /**
- * İlk aktif hasta DAY_START'ta başlar.
+ * İlk aktif hasta dayStart'ta başlar.
  * skipVisitIds içindeki ziyaretler rota/saatten çıkar (sırada kalır).
  */
 export async function buildDaySchedule(
   orderedVisits: Visit[],
   patientMap: Map<string, Patient>,
-  options?: { skipVisitIds?: ReadonlySet<string> },
+  options?: BuildDayScheduleOptions,
 ): Promise<DaySchedule> {
+  const dayStart = options?.dayStart ?? DAY_START
+  const visitDurationMin = options?.visitDurationMin ?? VISIT_DURATION_MIN
+
   if (orderedVisits.length === 0) {
     return { visits: [], legs: [] }
   }
@@ -42,8 +60,8 @@ export async function buildDaySchedule(
       visits: orderedVisits.map((v, i) => ({
         id: v.id,
         order: i,
-        startTime: v.startTime || DAY_START,
-        durationMin: v.durationMin || VISIT_DURATION_MIN,
+        startTime: v.startTime || dayStart,
+        durationMin: v.durationMin || visitDurationMin,
       })),
       legs: [],
     }
@@ -69,13 +87,13 @@ export async function buildDaySchedule(
     distanceKmMatrix = matrix.distanceKm
   }
 
-  let time = DAY_START
+  let time = dayStart
   const activeTimes = new Map<string, { startTime: string; durationMin: number }>()
   const legs: ScheduleLeg[] = []
 
   for (let i = 0; i < active.length; i++) {
     const v = active[i]
-    activeTimes.set(v.id, { startTime: time, durationMin: VISIT_DURATION_MIN })
+    activeTimes.set(v.id, { startTime: time, durationMin: visitDurationMin })
 
     if (i < active.length - 1) {
       const driveRaw = durationMinMatrix[i][i + 1]
@@ -89,7 +107,7 @@ export async function buildDaySchedule(
         distanceKm: Math.round(km * 10) / 10,
         durationMin: drive,
       })
-      time = addMinutesToTime(time, VISIT_DURATION_MIN + drive)
+      time = addMinutesToTime(time, visitDurationMin + drive)
     }
   }
 
@@ -98,8 +116,8 @@ export async function buildDaySchedule(
     return {
       id: v.id,
       order: i,
-      startTime: timed?.startTime ?? v.startTime ?? DAY_START,
-      durationMin: timed?.durationMin ?? v.durationMin ?? VISIT_DURATION_MIN,
+      startTime: timed?.startTime ?? v.startTime ?? dayStart,
+      durationMin: timed?.durationMin ?? v.durationMin ?? visitDurationMin,
     }
   })
 
@@ -119,4 +137,74 @@ export async function saveDaySchedule(
       durationMin: v.durationMin,
     })),
   )
+}
+
+/** Ayarlar kaydedilince tüm günlerin saatlerini yeniden hesapla */
+export async function rebuildAllSchedulesWithSettings(
+  practiceId: string,
+  settings: DayScheduleSettings,
+): Promise<void> {
+  const [patientsSnap, visitsSnap] = await Promise.all([
+    getDocs(collection(db, 'practices', practiceId, 'patients')),
+    getDocs(collection(db, 'practices', practiceId, 'visits')),
+  ])
+
+  const patientMap = new Map<string, Patient>()
+  for (const d of patientsSnap.docs) {
+    const data = d.data() as Record<string, unknown>
+    patientMap.set(d.id, {
+      id: d.id,
+      name: String(data.name ?? ''),
+      address: String(data.address ?? ''),
+      lat: typeof data.lat === 'number' ? data.lat : null,
+      lng: typeof data.lng === 'number' ? data.lng : null,
+      phone: typeof data.phone === 'string' ? data.phone : undefined,
+      notes: typeof data.notes === 'string' ? data.notes : undefined,
+      active: data.active !== false,
+      acceptFrom: typeof data.acceptFrom === 'string' ? data.acceptFrom : null,
+      acceptTo: typeof data.acceptTo === 'string' ? data.acceptTo : null,
+      createdAt: '',
+      updatedAt: '',
+    })
+  }
+
+  const byWeekday = new Map<Weekday, Visit[]>()
+  for (const d of WEEKDAYS) byWeekday.set(d.value, [])
+
+  for (const d of visitsSnap.docs) {
+    const data = d.data() as Record<string, unknown>
+    const weekday = data.weekday
+    if (typeof weekday !== 'number' || weekday < 1 || weekday > 6) continue
+    const wd = weekday as Weekday
+    const visit: Visit = {
+      id: d.id,
+      patientId: String(data.patientId ?? ''),
+      weekday: wd,
+      startTime: String(data.startTime ?? DAY_START),
+      order: typeof data.order === 'number' ? data.order : 0,
+      durationMin:
+        typeof data.durationMin === 'number' ? data.durationMin : VISIT_DURATION_MIN,
+      status: (data.status as Visit['status']) || 'planned',
+      statusDate: typeof data.statusDate === 'string' ? data.statusDate : null,
+      createdAt: '',
+      updatedAt: '',
+    }
+    byWeekday.get(wd)!.push(visit)
+  }
+
+  for (const d of WEEKDAYS) {
+    const list = byWeekday.get(d.value) ?? []
+    if (list.length === 0) continue
+    list.sort((a, b) => a.order - b.order || a.startTime.localeCompare(b.startTime))
+    const timing = timingForWeekday(settings, d.value)
+    try {
+      const schedule = await buildDaySchedule(list, patientMap, {
+        dayStart: timing.startTime,
+        visitDurationMin: timing.durationMin,
+      })
+      await saveDaySchedule(practiceId, schedule)
+    } catch {
+      /* konum eksik vb. — o günü atla */
+    }
+  }
 }

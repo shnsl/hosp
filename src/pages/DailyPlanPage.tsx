@@ -2,14 +2,18 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { IconCheck, IconClose, IconFinishDay, IconPlus, IconRefresh, IconRoute, IconTrash } from '../components/Icons'
 import { SortableList } from '../components/SortableList'
+import { useConfirm } from '../components/useConfirm'
 import {
-  DAY_START,
-  VISIT_DURATION_MIN,
   buildDaySchedule,
   endTimeOf,
   saveDaySchedule,
   type ScheduleLeg,
 } from '../features/agenda/schedule'
+import {
+  defaultDayScheduleSettings,
+  subscribeDayScheduleSettings,
+  timingForWeekday,
+} from '../features/agenda/daySettings'
 import { subscribePatients } from '../features/patients/api'
 import { suggestRoute, patientToAcceptWindow, timeToMinutes } from '../features/routing/optimize'
 import {
@@ -22,7 +26,7 @@ import {
   createVisit,
   deleteVisit,
   migrateVisitsToWeekday,
-  subscribeVisitsForWeekday,
+  subscribeAllVisits,
   updateVisit,
 } from '../features/visits/api'
 import { useAuth } from '../lib/auth'
@@ -49,19 +53,22 @@ function initialWeekday(param: string | null): Weekday {
 
 export function DailyPlanPage() {
   const { practiceId } = useAuth()
+  const { confirm, dialog: confirmDialog } = useConfirm()
   const [searchParams, setSearchParams] = useSearchParams()
   const [weekday, setWeekday] = useState<Weekday>(() =>
     initialWeekday(searchParams.get('day')),
   )
   const [patients, setPatients] = useState<Patient[]>([])
-  const [visits, setVisits] = useState<Visit[]>([])
+  const [allVisits, setAllVisits] = useState<Visit[]>([])
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [scheduling, setScheduling] = useState(false)
   const [legs, setLegs] = useState<ScheduleLeg[]>([])
   const [startPickerOpen, setStartPickerOpen] = useState(false)
+  const [addPatientOpen, setAddPatientOpen] = useState(false)
   const [finishingDay, setFinishingDay] = useState(false)
+  const [daySettings, setDaySettings] = useState(defaultDayScheduleSettings)
 
   useEffect(() => {
     const fromUrl = initialWeekday(searchParams.get('day'))
@@ -82,6 +89,13 @@ export function DailyPlanPage() {
 
   useEffect(() => {
     if (!practiceId) return
+    return subscribeDayScheduleSettings(practiceId, setDaySettings, (e) =>
+      setError(e.message),
+    )
+  }, [practiceId])
+
+  useEffect(() => {
+    if (!practiceId) return
     let active = true
     let unsub: (() => void) | undefined
 
@@ -95,17 +109,36 @@ export function DailyPlanPage() {
         /* ignore */
       }
       if (!active) return
-      setLegs([])
-      unsub = subscribeVisitsForWeekday(practiceId, weekday, setVisits, (e) =>
-        setError(e.message),
-      )
+      unsub = subscribeAllVisits(practiceId, setAllVisits, (e) => setError(e.message))
     })()
 
     return () => {
       active = false
       unsub?.()
     }
-  }, [practiceId, weekday])
+  }, [practiceId])
+
+  useEffect(() => {
+    setLegs([])
+  }, [weekday])
+
+  const visits = useMemo(
+    () => allVisits.filter((v) => v.weekday === weekday),
+    [allVisits, weekday],
+  )
+
+  const weeklyVisitCount = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const v of allVisits) {
+      m.set(v.patientId, (m.get(v.patientId) ?? 0) + 1)
+    }
+    return m
+  }, [allVisits])
+
+  const dayTiming = useMemo(
+    () => timingForWeekday(daySettings, weekday),
+    [daySettings, weekday],
+  )
 
   const patientMap = useMemo(() => {
     const m = new Map<string, Patient>()
@@ -156,11 +189,11 @@ export function DailyPlanPage() {
     const last = active[active.length - 1]
     return {
       end: last
-        ? endTimeOf(last.startTime, last.durationMin || VISIT_DURATION_MIN)
+        ? endTimeOf(last.startTime, last.durationMin || dayTiming.durationMin)
         : null,
       count: sorted.length,
     }
-  }, [sorted, weekday])
+  }, [sorted, weekday, dayTiming.durationMin])
 
   async function reschedule(ordered: Visit[]) {
     if (!practiceId) return
@@ -176,7 +209,11 @@ export function DailyPlanPage() {
           .filter((v) => effectiveVisitStatus(v, weekday) === 'cancelled')
           .map((v) => v.id),
       )
-      const schedule = await buildDaySchedule(ordered, patientMap, { skipVisitIds })
+      const schedule = await buildDaySchedule(ordered, patientMap, {
+        skipVisitIds,
+        dayStart: dayTiming.startTime,
+        visitDurationMin: dayTiming.durationMin,
+      })
       await saveDaySchedule(practiceId, schedule)
       setLegs(schedule.legs)
     } catch (err) {
@@ -196,8 +233,8 @@ export function DailyPlanPage() {
         {
           patientId: patient.id,
           weekday,
-          startTime: DAY_START,
-          durationMin: VISIT_DURATION_MIN,
+          startTime: dayTiming.startTime,
+          durationMin: dayTiming.durationMin,
           status: 'planned',
         },
         sorted.length,
@@ -208,9 +245,9 @@ export function DailyPlanPage() {
           id: newId,
           patientId: patient.id,
           weekday,
-          startTime: DAY_START,
+          startTime: dayTiming.startTime,
           order: sorted.length,
-          durationMin: VISIT_DURATION_MIN,
+          durationMin: dayTiming.durationMin,
           status: 'planned',
           createdAt: '',
           updatedAt: '',
@@ -227,7 +264,12 @@ export function DailyPlanPage() {
   async function removeVisit(visit: Visit) {
     if (!practiceId) return
     const name = patientMap.get(visit.patientId)?.name ?? 'Hasta'
-    if (!window.confirm(`“${name}” plandan çıkarılsın mı?`)) return
+    const ok = await confirm({
+      title: 'Plandan çıkar',
+      message: `“${name}” bu günün planından silinsin mi?`,
+      confirmLabel: 'Sil',
+    })
+    if (!ok) return
     setError(null)
     try {
       await deleteVisit(practiceId, visit.id)
@@ -276,13 +318,12 @@ export function DailyPlanPage() {
     })
 
     if (marked.length === 0) {
-      if (
-        !window.confirm(
-          'Alındı/iptal işareti yok.\nÖzet tablosundaki tüm kayıtlar sıfırlansın mı?',
-        )
-      ) {
-        return
-      }
+      const ok = await confirm({
+        title: 'Özet tablosunu sıfırla',
+        message: 'Alındı/iptal işareti yok.\nÖzet tablosundaki tüm kayıtlar silinsin mi?',
+        confirmLabel: 'Sıfırla',
+      })
+      if (!ok) return
       setFinishingDay(true)
       setError(null)
       setNotice(null)
@@ -299,13 +340,13 @@ export function DailyPlanPage() {
       return
     }
 
-    if (
-      !window.confirm(
-        `${weekdayLabel(weekday)} günü bitirilsin mi?\n${marked.length} kayıt tabloya yazılacak; işaretler sıfırlanır. 2 haftadan eski kayıtlar silinir.`,
-      )
-    ) {
-      return
-    }
+    const ok = await confirm({
+      title: 'Günü bitir',
+      message: `${weekdayLabel(weekday)} günü bitirilsin mi?\n${marked.length} kayıt tabloya yazılacak; işaretler sıfırlanır. 2 haftadan eski kayıtlar silinir.`,
+      confirmLabel: 'Bitir',
+      danger: false,
+    })
+    if (!ok) return
 
     setFinishingDay(true)
     setError(null)
@@ -374,8 +415,8 @@ export function DailyPlanPage() {
       const suggestion = await suggestRoute(points, {
         startIndex,
         windows,
-        dayStartMin: timeToMinutes(DAY_START),
-        visitDurationMin: VISIT_DURATION_MIN,
+        dayStartMin: timeToMinutes(dayTiming.startTime),
+        visitDurationMin: dayTiming.durationMin,
       })
       const optimizedActive = suggestion.order.map((i) => active[i]).filter(Boolean)
       if (optimizedActive.length !== active.length) {
@@ -419,8 +460,8 @@ export function DailyPlanPage() {
       </div>
 
       <p className="muted small schedule-rules">
-        İlk hasta <strong>{DAY_START}</strong> · her hastada{' '}
-        <strong>{VISIT_DURATION_MIN} dk</strong>
+        İlk hasta <strong>{dayTiming.startTime}</strong> · her hastada{' '}
+        <strong>{dayTiming.durationMin} dk</strong>
         {daySummary ? (
           <>
             {daySummary.end ? (
@@ -499,10 +540,6 @@ export function DailyPlanPage() {
             </button>
           </div>
         </div>
-        <p className="muted small plan-hint">
-          1 sn basılı tutup sürükleyerek sırayı değiştir; bu düzen her{' '}
-          {weekdayLabel(weekday)} tekrarlanır.
-        </p>
 
         {sorted.length === 0 ? (
           <p className="muted">Bu güne henüz hasta eklenmedi.</p>
@@ -512,10 +549,17 @@ export function DailyPlanPage() {
             onReorder={(ids) => void onReorder(ids)}
             renderItem={(visit, index) => {
               const patient = patientMap.get(visit.patientId)
-              const duration = visit.durationMin || VISIT_DURATION_MIN
+              const duration = visit.durationMin || dayTiming.durationMin
               const end = endTimeOf(visit.startTime, duration)
               const leg = legAfter.get(visit.id)
               const att = effectiveVisitStatus(visit, weekday)
+              const weekCount = weeklyVisitCount.get(visit.patientId) ?? 0
+              const weekTone =
+                weekCount === 2
+                  ? 'is-week-2'
+                  : weekCount === 3
+                    ? 'is-week-3'
+                    : 'is-week-other'
               return (
                 <div
                   className={`plan-item ${att === 'done' ? 'is-done' : ''} ${att === 'cancelled' ? 'is-cancelled' : ''}`}
@@ -524,7 +568,9 @@ export function DailyPlanPage() {
                     <div className="plan-row-main">
                       <span className="visit-order plan-order">{index + 1}</span>
                       <div>
-                        <p className="visit-name plan-name">{patient?.name ?? 'Hasta'}</p>
+                        <p className={`visit-name plan-name ${weekTone}`}>
+                          {patient?.name ?? 'Hasta'}
+                        </p>
                         {att !== 'cancelled' ? (
                           <p className="muted plan-time">
                             {visit.startTime} – {end}
@@ -581,32 +627,44 @@ export function DailyPlanPage() {
         )}
       </section>
 
-      <section className="panel">
-        <h2>Hasta Ekle</h2>
-        {patients.length === 0 ? (
-          <p className="muted">
-            Önce <Link to="/patients">hasta kaydı</Link> oluştur.
-          </p>
-        ) : availablePatients.length === 0 ? (
-          <p className="muted">Tüm aktif hastalar bu güne eklendi.</p>
-        ) : (
-          <ul className="patient-pick-list">
-            {availablePatients.map((p) => (
-              <li key={p.id}>
-                <strong className="pick-name">{p.name}</strong>
-                <button
-                  className="btn primary icon-action"
-                  type="button"
-                  aria-label="Ekle"
-                  disabled={busyId === p.id || scheduling || p.lat == null || p.lng == null}
-                  onClick={() => void addPatient(p)}
-                >
-                  {busyId === p.id ? '…' : <IconPlus />}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+      <section className="panel add-patient-panel">
+        <button
+          type="button"
+          className="add-patient-toggle"
+          aria-expanded={addPatientOpen}
+          onClick={() => setAddPatientOpen((o) => !o)}
+        >
+          <h2>Hasta Ekle</h2>
+          <span className="muted small" aria-hidden>
+            {addPatientOpen ? '▲' : '▼'}
+          </span>
+        </button>
+        {addPatientOpen ? (
+          patients.length === 0 ? (
+            <p className="muted">
+              Önce <Link to="/patients">hasta kaydı</Link> oluştur.
+            </p>
+          ) : availablePatients.length === 0 ? (
+            <p className="muted">Tüm aktif hastalar bu güne eklendi.</p>
+          ) : (
+            <ul className="patient-pick-list">
+              {availablePatients.map((p) => (
+                <li key={p.id}>
+                  <strong className="pick-name">{p.name}</strong>
+                  <button
+                    className="btn primary icon-action"
+                    type="button"
+                    aria-label="Ekle"
+                    disabled={busyId === p.id || scheduling || p.lat == null || p.lng == null}
+                    onClick={() => void addPatient(p)}
+                  >
+                    {busyId === p.id ? '…' : <IconPlus />}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : null}
       </section>
 
       {startPickerOpen && (
@@ -660,6 +718,7 @@ export function DailyPlanPage() {
           </div>
         </div>
       )}
+      {confirmDialog}
     </div>
   )
 }

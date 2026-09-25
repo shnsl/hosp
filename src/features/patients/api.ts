@@ -14,6 +14,8 @@ import { z } from 'zod'
 import type { Patient } from '../../types'
 import { db } from '../../lib/firebase'
 import { formatLatLng, parseLatLngText } from '../routing/coords'
+import { deleteAttendanceForPatient } from '../attendance/api'
+import { deleteVisitsForPatient } from '../visits/api'
 
 export const patientFormSchema = z.object({
   name: z.string().trim().min(1, 'Ad gerekli'),
@@ -160,5 +162,7 @@ export async function deletePatient(
   practiceId: string,
   patientId: string,
 ): Promise<void> {
+  await deleteVisitsForPatient(practiceId, patientId)
+  await deleteAttendanceForPatient(practiceId, patientId)
   await deleteDoc(doc(db, 'practices', practiceId, 'patients', patientId))
 }

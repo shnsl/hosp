@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { CoordsField } from '../components/CoordsField'
 import { IconCheck, IconTrash } from '../components/Icons'
+import { useConfirm } from '../components/useConfirm'
 import {
   deletePatient,
   subscribePatients,
@@ -14,6 +15,7 @@ import type { Patient } from '../types'
 export function PatientDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { practiceId } = useAuth()
+  const { confirm, dialog: confirmDialog } = useConfirm()
   const navigate = useNavigate()
   const [patient, setPatient] = useState<Patient | null>(null)
   const [form, setForm] = useState<PatientFormValues | null>(null)
@@ -79,7 +81,12 @@ export function PatientDetailPage() {
 
   async function onDelete() {
     if (!practiceId || !patient) return
-    if (!window.confirm(`“${patient.name}” silinsin mi?`)) return
+    const ok = await confirm({
+      title: 'Hastayı sil',
+      message: `“${patient.name}” silinsin mi?\nBu işlem geri alınamaz.`,
+      confirmLabel: 'Sil',
+    })
+    if (!ok) return
     await deletePatient(practiceId, patient.id)
     navigate('/patients')
   }
@@ -167,6 +174,7 @@ export function PatientDetailPage() {
           </div>
         </form>
       </section>
+      {confirmDialog}
     </div>
   )
 }

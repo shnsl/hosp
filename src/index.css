@@ -486,6 +486,49 @@ textarea {
   margin: 1rem 0 0.5rem;
 }
 
+.day-timing-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.day-timing-row {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, 0.9fr) 1fr 1fr;
+  gap: 0.45rem;
+  align-items: end;
+}
+
+.day-timing-label {
+  font-size: 0.9rem;
+  padding-bottom: 0.55rem;
+}
+
+.day-timing-field {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.day-timing-field input {
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+@media (max-width: 480px) {
+  .day-timing-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .day-timing-label {
+    grid-column: 1 / -1;
+    padding-bottom: 0;
+  }
+}
+
 .accent-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
@@ -923,7 +966,6 @@ html[data-theme='dark'] .weekday-chip.is-active {
 }
 
 .visit-list,
-.patient-list,
 .simple-list,
 .suggest-list {
   list-style: none;
@@ -933,6 +975,56 @@ html[data-theme='dark'] .weekday-chip.is-active {
   gap: 0.75rem;
 }
 
+.patient-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.patient-sort {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.65rem;
+}
+
+.patient-sort-chip {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.patient-sort-chip.is-active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+html[data-theme='dark'] .patient-sort-chip.is-active {
+  color: #0c1415;
+}
+
+@media (min-width: 640px) {
+  .patient-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 960px) {
+  .patient-list {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 .suggest-list {
   list-style: decimal;
   padding-left: 1.25rem;
@@ -940,7 +1032,6 @@ html[data-theme='dark'] .weekday-chip.is-active {
 }
 
 .visit-card,
-.patient-card,
 .simple-list li {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -997,6 +1088,38 @@ html[data-theme='dark'] .weekday-chip.is-active {
   align-items: center;
 }
 
+.patient-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.4rem 0.35rem 0.4rem 0.55rem;
+  box-shadow: none;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.patient-card .plan-name {
+  font-size: 0.88rem;
+  line-height: 1.2;
+}
+
+.patient-card .patient-week-count,
+.patient-card .warn.small {
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.patient-card .btn.icon-action {
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+}
+
+.patient-card .btn.icon-action svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
 .patient-card.is-editing {
   border-color: var(--brand);
 }
@@ -1007,7 +1130,7 @@ html[data-theme='dark'] .weekday-chip.is-active {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.15rem;
+  gap: 0.05rem;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1134,6 +1257,33 @@ html[data-theme='dark'] .weekday-chip.is-active {
   max-width: 100%;
 }
 
+.plan-name.is-week-2 {
+  color: #0891b2;
+  font-weight: 800;
+}
+
+.plan-name.is-week-3 {
+  color: #db2777;
+  font-weight: 800;
+}
+
+.plan-name.is-week-other {
+  color: #b45309;
+  font-weight: 800;
+}
+
+html[data-theme='dark'] .plan-name.is-week-2 {
+  color: #22d3ee;
+}
+
+html[data-theme='dark'] .plan-name.is-week-3 {
+  color: #f472b6;
+}
+
+html[data-theme='dark'] .plan-name.is-week-other {
+  color: #fbbf24;
+}
+
 .plan-time {
   margin: 0.15rem 0 0;
   font-size: 0.85rem;
@@ -1158,6 +1308,37 @@ html[data-theme='dark'] .weekday-chip.is-active {
 .icon-action svg {
   width: 1.15rem;
   height: 1.15rem;
+}
+
+.add-patient-toggle,
+.panel-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.add-patient-toggle h2,
+.panel-toggle h2 {
+  margin: 0;
+}
+
+.settings-panel-body {
+  margin-top: 0.75rem;
+}
+
+.add-patient-panel .patient-pick-list,
+.add-patient-panel > .muted {
+  margin-top: 0.75rem;
 }
 
 .sortable-list,
@@ -1367,6 +1548,23 @@ html[data-theme='dark'] .weekday-chip.is-active {
   gap: 0.75rem;
   padding: 0.85rem 1rem 1rem;
   border-top: 1px solid var(--line);
+}
+
+.confirm-modal {
+  width: min(420px, 100%);
+  max-height: none;
+}
+
+.confirm-modal .modal-footer {
+  justify-content: flex-end;
+}
+
+.confirm-modal-message {
+  margin: 0;
+  padding: 0 1rem 0.35rem;
+  white-space: pre-line;
+  color: var(--ink);
+  line-height: 1.45;
 }
 
 .coords-preview {

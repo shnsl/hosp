@@ -166,6 +166,35 @@ export async function deleteVisit(
   await deleteDoc(doc(db, 'practices', practiceId, 'visits', visitId))
 }
 
+/** Hastaya ait tüm şablon ziyaretlerini sil (günlük planlardan çıkar) */
+export async function deleteVisitsForPatient(
+  practiceId: string,
+  patientId: string,
+): Promise<number> {
+  const q = query(
+    collection(db, 'practices', practiceId, 'visits'),
+    where('patientId', '==', patientId),
+  )
+  const snap = await getDocs(q)
+  if (snap.empty) return 0
+
+  let deleted = 0
+  let batch = writeBatch(db)
+  let ops = 0
+  for (const d of snap.docs) {
+    batch.delete(d.ref)
+    deleted += 1
+    ops += 1
+    if (ops >= 400) {
+      await batch.commit()
+      batch = writeBatch(db)
+      ops = 0
+    }
+  }
+  if (ops > 0) await batch.commit()
+  return deleted
+}
+
 export async function reorderVisits(
   practiceId: string,
   orderedVisitIds: string[],
