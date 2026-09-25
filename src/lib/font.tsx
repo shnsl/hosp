@@ -23,7 +23,7 @@ interface FontContextValue {
   setFontId: (id: AppFontId) => void
 }
 
-const STORAGE_KEY = 'hosp-font'
+const STORAGE_KEY = 'hosp-font-v2'
 const STYLE_ID = 'hosp-app-fonts'
 const FontContext = createContext<FontContextValue | null>(null)
 

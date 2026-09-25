@@ -124,7 +124,7 @@ export const APP_FONTS: AppFontOption[] = [
   },
 ]
 
-export const DEFAULT_FONT_ID: AppFontId = 'inter'
+export const DEFAULT_FONT_ID: AppFontId = 'sf'
 
 export function isAppFontId(value: string | null | undefined): value is AppFontId {
   return APP_FONTS.some((f) => f.id === value)

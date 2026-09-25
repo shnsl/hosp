@@ -10,7 +10,6 @@ import {
   IconWeek,
 } from './Icons'
 import { LiveClock } from './LiveClock'
-import { enterImmersive } from '../lib/immersive'
 
 export function AppLayout() {
   return (
@@ -47,7 +46,7 @@ export function AppLayout() {
             title="Yenile"
             aria-label="Sayfayı yenile"
             onClick={() => {
-              void enterImmersive().finally(() => window.location.reload())
+              window.location.reload()
             }}
           >
             <IconRefresh />

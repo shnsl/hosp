@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  --app-font: Inter, system-ui, sans-serif;
+  --app-font: 'San Francisco', system-ui, sans-serif;
   --bg: #e8f1f1;
   --bg-accent: #d0e4e4;
   --bg-top: #f2f8f8;
