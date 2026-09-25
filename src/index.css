@@ -1401,7 +1401,13 @@ html[data-theme='dark'] .patient-sort-chip.is-active {
 }
 
 .plan-item.is-done {
+  border-color: transparent;
+  background: transparent;
+}
+
+.sortable-row:has(.plan-item.is-done) {
   border-color: color-mix(in srgb, #0a6b4a 35%, var(--line));
+  background: color-mix(in srgb, #0a6b4a 18%, var(--surface));
 }
 
 .plan-item.is-cancelled {
