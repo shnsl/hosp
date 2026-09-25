@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  --app-font: 'Segoe UI', 'Trebuchet MS', sans-serif;
+  --app-font: Inter, system-ui, sans-serif;
   --bg: #e8f1f1;
   --bg-accent: #d0e4e4;
   --bg-top: #f2f8f8;
@@ -629,6 +629,45 @@ html:-webkit-full-screen .app-shell {
 
 .accent-label {
   margin: 1rem 0 0.5rem;
+}
+
+.font-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+  gap: 0.55rem;
+}
+
+.font-picker-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  text-align: left;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.font-picker-option:hover {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+}
+
+.font-picker-option.is-selected {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 10%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 35%, transparent);
+}
+
+.font-picker-name {
+  font-weight: 600;
+  font-size: 0.98rem;
+}
+
+.font-picker-sample {
+  line-height: 1.3;
 }
 
 .day-timing-list {

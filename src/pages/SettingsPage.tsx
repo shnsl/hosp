@@ -17,6 +17,7 @@ import {
   registerBiometricLogin,
 } from '../lib/biometrics'
 import { WEEKDAYS, type Weekday } from '../lib/dates'
+import { useFont } from '../lib/font'
 import { useTheme } from '../lib/theme'
 
 type SectionId = 'schedule' | 'appearance' | 'pin' | 'bio' | 'session'
@@ -62,6 +63,7 @@ function SettingsSection({
 export function SettingsPage() {
   const { practiceId, changePin, logout } = useAuth()
   const { theme, accent, toggleTheme, setAccent } = useTheme()
+  const { fontId, fonts, setFontId } = useFont()
   const [currentPin, setCurrentPin] = useState('')
   const [nextPin, setNextPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
@@ -268,6 +270,31 @@ export function SettingsPage() {
         <button className="btn" type="button" onClick={toggleTheme}>
           Tema: {theme === 'dark' ? 'Koyu' : 'Açık'}
         </button>
+
+        <p className="muted small accent-label">Yazı tipi</p>
+        <p className="muted small">
+          Türkçe karakterleri (ğüşıöç) destekleyen yazı tipleri. Seçim bu cihazda
+          saklanır.
+        </p>
+        <div className="font-picker" role="radiogroup" aria-label="Yazı tipi">
+          {fonts.map((font) => {
+            const selected = font.id === fontId
+            return (
+              <button
+                key={font.id}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                className={`font-picker-option${selected ? ' is-selected' : ''}`}
+                style={{ fontFamily: font.stack }}
+                onClick={() => setFontId(font.id)}
+              >
+                <span className="font-picker-name">{font.label}</span>
+                <span className="font-picker-sample muted small">{font.sample}</span>
+              </button>
+            )
+          })}
+        </div>
 
         <p className="muted small accent-label">Renk</p>
         <div className="accent-grid" role="listbox" aria-label="Renk paleti">

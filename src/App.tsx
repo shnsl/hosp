@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from './components/AppLayout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './lib/auth'
+import { FontProvider } from './lib/font'
 import { ThemeProvider } from './lib/theme'
 import { DailyPlanPage } from './pages/DailyPlanPage'
 import { ExceptionsPage } from './pages/ExceptionsPage'
@@ -18,27 +19,29 @@ export default function App() {
 
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <BrowserRouter basename={basename}>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route element={<ProtectedRoute />}>
-              <Route element={<AppLayout />}>
-                <Route index element={<DailyPlanPage />} />
-                <Route path="week" element={<WeeklyPlanPage />} />
-                <Route path="agenda" element={<Navigate to="/" replace />} />
-                <Route path="patients" element={<PatientsPage />} />
-                <Route path="patients/:id" element={<PatientDetailPage />} />
-                <Route path="search" element={<SearchPage />} />
-                <Route path="tracking" element={<TrackingPage />} />
-                <Route path="exceptions" element={<ExceptionsPage />} />
-                <Route path="settings" element={<SettingsPage />} />
+      <FontProvider>
+        <AuthProvider>
+          <BrowserRouter basename={basename}>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route element={<ProtectedRoute />}>
+                <Route element={<AppLayout />}>
+                  <Route index element={<DailyPlanPage />} />
+                  <Route path="week" element={<WeeklyPlanPage />} />
+                  <Route path="agenda" element={<Navigate to="/" replace />} />
+                  <Route path="patients" element={<PatientsPage />} />
+                  <Route path="patients/:id" element={<PatientDetailPage />} />
+                  <Route path="search" element={<SearchPage />} />
+                  <Route path="tracking" element={<TrackingPage />} />
+                  <Route path="exceptions" element={<ExceptionsPage />} />
+                  <Route path="settings" element={<SettingsPage />} />
+                </Route>
               </Route>
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </FontProvider>
     </ThemeProvider>
   )
 }
