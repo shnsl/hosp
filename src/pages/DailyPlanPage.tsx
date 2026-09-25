@@ -440,7 +440,6 @@ export function DailyPlanPage() {
         <div>
           <p className="eyebrow">Plan</p>
           <h1>Günlük Plan</h1>
-          <p className="muted">{weekdayLabel(weekday)}</p>
         </div>
       </header>
 
