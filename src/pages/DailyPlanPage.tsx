@@ -500,7 +500,8 @@ export function DailyPlanPage() {
           </div>
         </div>
         <p className="muted small plan-hint">
-          Sürükleyerek sırayı değiştir; bu düzen her {weekdayLabel(weekday)} tekrarlanır.
+          1 sn basılı tutup sürükleyerek sırayı değiştir; bu düzen her{' '}
+          {weekdayLabel(weekday)} tekrarlanır.
         </p>
 
         {sorted.length === 0 ? (

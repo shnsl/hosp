@@ -1176,6 +1176,7 @@ html[data-theme='dark'] .weekday-chip.is-active {
 }
 
 .sortable-row {
+  position: relative;
   display: flex;
   align-items: stretch;
   gap: 0;
@@ -1184,12 +1185,41 @@ html[data-theme='dark'] .weekday-chip.is-active {
   border-radius: var(--radius);
   padding: 0.45rem 0.5rem;
   box-shadow: var(--shadow);
-  touch-action: none;
+  touch-action: pan-y;
   user-select: none;
   cursor: grab;
+  overflow: hidden;
+}
+
+.sortable-row.is-arming {
+  touch-action: none;
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+}
+
+.sortable-row.is-arming::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--brand) 16%, transparent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: sort-arm-fill 1s linear forwards;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes sort-arm-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }
 
 .sortable-row.is-dragging {
+  touch-action: none;
   border-color: var(--brand);
   background: color-mix(in srgb, var(--brand) 10%, var(--surface));
   opacity: 0.95;
@@ -1197,6 +1227,8 @@ html[data-theme='dark'] .weekday-chip.is-active {
 }
 
 .sortable-body {
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-width: 0;
   display: flex;
