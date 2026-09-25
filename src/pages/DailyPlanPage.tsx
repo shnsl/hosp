@@ -648,20 +648,29 @@ export function DailyPlanPage() {
             <p className="muted">Tüm aktif hastalar bu güne eklendi.</p>
           ) : (
             <ul className="patient-pick-list">
-              {availablePatients.map((p) => (
-                <li key={p.id}>
-                  <strong className="pick-name">{p.name}</strong>
-                  <button
-                    className="btn primary icon-action"
-                    type="button"
-                    aria-label="Ekle"
-                    disabled={busyId === p.id || scheduling || p.lat == null || p.lng == null}
-                    onClick={() => void addPatient(p)}
-                  >
-                    {busyId === p.id ? '…' : <IconPlus />}
-                  </button>
-                </li>
-              ))}
+              {availablePatients.map((p) => {
+                const weekCount = weeklyVisitCount.get(p.id) ?? 0
+                const weekTone =
+                  weekCount === 2
+                    ? 'is-week-2'
+                    : weekCount === 3
+                      ? 'is-week-3'
+                      : 'is-week-other'
+                return (
+                  <li key={p.id} className={weekTone}>
+                    <strong className={`pick-name plan-name ${weekTone}`}>{p.name}</strong>
+                    <button
+                      className="btn primary icon-action"
+                      type="button"
+                      aria-label="Ekle"
+                      disabled={busyId === p.id || scheduling || p.lat == null || p.lng == null}
+                      onClick={() => void addPatient(p)}
+                    >
+                      {busyId === p.id ? '…' : <IconPlus />}
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           )
         ) : null}

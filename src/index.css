@@ -1398,30 +1398,42 @@ html[data-theme='dark'] .patient-sort-chip.is-active {
   max-width: 100%;
 }
 
-.plan-name.is-week-2 {
+.plan-name.is-week-2,
+.visit-name.plan-name.is-week-2,
+.pick-name.is-week-2 {
   color: #0891b2;
   font-weight: 800;
 }
 
-.plan-name.is-week-3 {
+.plan-name.is-week-3,
+.visit-name.plan-name.is-week-3,
+.pick-name.is-week-3 {
   color: #db2777;
   font-weight: 800;
 }
 
-.plan-name.is-week-other {
+.plan-name.is-week-other,
+.visit-name.plan-name.is-week-other,
+.pick-name.is-week-other {
   color: #b45309;
   font-weight: 800;
 }
 
-html[data-theme='dark'] .plan-name.is-week-2 {
+html[data-theme='dark'] .plan-name.is-week-2,
+html[data-theme='dark'] .visit-name.plan-name.is-week-2,
+html[data-theme='dark'] .pick-name.is-week-2 {
   color: #22d3ee;
 }
 
-html[data-theme='dark'] .plan-name.is-week-3 {
+html[data-theme='dark'] .plan-name.is-week-3,
+html[data-theme='dark'] .visit-name.plan-name.is-week-3,
+html[data-theme='dark'] .pick-name.is-week-3 {
   color: #f472b6;
 }
 
-html[data-theme='dark'] .plan-name.is-week-other {
+html[data-theme='dark'] .plan-name.is-week-other,
+html[data-theme='dark'] .visit-name.plan-name.is-week-other,
+html[data-theme='dark'] .pick-name.is-week-other {
   color: #fbbf24;
 }
 
