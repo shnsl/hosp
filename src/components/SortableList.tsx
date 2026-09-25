@@ -17,10 +17,33 @@ interface SortableListProps<T extends Item> {
 const HOLD_MS = 1000
 const MOVE_CANCEL_PX = 12
 
+function lockPageScroll() {
+  const y = window.scrollY
+  document.documentElement.classList.add('sort-scroll-lock')
+  document.documentElement.dataset.sortScrollY = String(y)
+  document.body.style.position = 'fixed'
+  document.body.style.top = `-${y}px`
+  document.body.style.left = '0'
+  document.body.style.right = '0'
+  document.body.style.width = '100%'
+}
+
+function unlockPageScroll() {
+  const y = Number(document.documentElement.dataset.sortScrollY || '0')
+  document.documentElement.classList.remove('sort-scroll-lock')
+  delete document.documentElement.dataset.sortScrollY
+  document.body.style.position = ''
+  document.body.style.top = ''
+  document.body.style.left = ''
+  document.body.style.right = ''
+  document.body.style.width = ''
+  window.scrollTo(0, y)
+}
+
 /**
  * Satırın kendisinden sürükle-bırak (buton/link hariç).
  * Sürükleme kilidi: kartı 1 sn basılı tutunca açılır.
- * Sağda scroll boşluğu CSS ile bırakılır.
+ * Sürükleme açıkken sayfa kaydırması kilitlenir.
  */
 export function SortableList<T extends Item>({
   items,
@@ -34,6 +57,7 @@ export function SortableList<T extends Item>({
   const draggingRef = useRef(false)
   const unlockedRef = useRef(false)
   const armingRef = useRef(false)
+  const scrollLockedRef = useRef(false)
   const holdTimerRef = useRef<number | null>(null)
   const startPointRef = useRef<{ x: number; y: number } | null>(null)
   const armIndexRef = useRef<number | null>(null)
@@ -48,8 +72,25 @@ export function SortableList<T extends Item>({
   useEffect(() => {
     return () => {
       if (holdTimerRef.current != null) window.clearTimeout(holdTimerRef.current)
+      if (scrollLockedRef.current) {
+        unlockPageScroll()
+        scrollLockedRef.current = false
+      }
     }
   }, [])
+
+  useEffect(() => {
+    if (!draggingId) return
+
+    const blockTouchScroll = (e: TouchEvent) => {
+      e.preventDefault()
+    }
+
+    document.addEventListener('touchmove', blockTouchScroll, { passive: false })
+    return () => {
+      document.removeEventListener('touchmove', blockTouchScroll)
+    }
+  }, [draggingId])
 
   function isInteractiveTarget(target: EventTarget | null): boolean {
     if (!(target instanceof Element)) return false
@@ -61,6 +102,18 @@ export function SortableList<T extends Item>({
       window.clearTimeout(holdTimerRef.current)
       holdTimerRef.current = null
     }
+  }
+
+  function beginScrollLock() {
+    if (scrollLockedRef.current) return
+    scrollLockedRef.current = true
+    lockPageScroll()
+  }
+
+  function endScrollLock() {
+    if (!scrollLockedRef.current) return
+    scrollLockedRef.current = false
+    unlockPageScroll()
   }
 
   function cancelArming() {
@@ -100,6 +153,7 @@ export function SortableList<T extends Item>({
       dragIndexRef.current = unlockIndex
       setArmingId(null)
       setDraggingId(localRef.current[unlockIndex]?.id ?? id)
+      beginScrollLock()
 
       try {
         row.setPointerCapture(pointerId)
@@ -125,6 +179,8 @@ export function SortableList<T extends Item>({
       }
       return
     }
+
+    e.preventDefault()
 
     const from = dragIndexRef.current
     if (from == null) return
@@ -168,10 +224,11 @@ export function SortableList<T extends Item>({
     dragIndexRef.current = null
     draggingRef.current = false
     setDraggingId(null)
+    endScrollLock()
   }
 
   return (
-    <ul className="sortable-list">
+    <ul className={`sortable-list${draggingId ? ' is-reordering' : ''}`}>
       {local.map((item, index) => {
         const isArming = armingId === item.id
         const isDragging = draggingId === item.id

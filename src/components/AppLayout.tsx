@@ -8,21 +8,27 @@ import {
   IconTracking,
   IconWeek,
 } from './Icons'
+import { LiveClock } from './LiveClock'
 
 export function AppLayout() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <Link to="/" className="brand" aria-label="AJAN">
-          <img
-            className="brand-mark"
-            src={`${import.meta.env.BASE_URL}pwa-192.png`}
-            alt=""
-            width={28}
-            height={28}
-          />
-          AJAN
-        </Link>
+        <div className="brand-with-clock">
+          <Link to="/" className="brand" aria-label="AJAN">
+            <img
+              className="brand-mark"
+              src={`${import.meta.env.BASE_URL}pwa-192.png`}
+              alt=""
+              width={28}
+              height={28}
+            />
+            <span className="brand-text">
+              <span className="brand-name">AJAN</span>
+              <LiveClock />
+            </span>
+          </Link>
+        </div>
         <nav className="nav" aria-label="Ana menü">
           <NavLink to="/" end title="Günlük Plan" aria-label="Günlük Plan">
             <IconAgenda />
