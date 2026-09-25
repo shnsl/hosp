@@ -264,14 +264,24 @@ html[data-theme='dark'][data-accent='indigo'] {
   box-sizing: border-box;
 }
 
+html {
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
+}
+
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
+  /* Chrome (Android) aşağı çekince yenilemeyi kes */
+  overscroll-behavior-block: none;
 }
 
 #root {
   min-height: 100vh;
+  overscroll-behavior-y: none;
 }
 
 a {
@@ -361,6 +371,7 @@ textarea {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  overscroll-behavior-y: none;
 }
 
 .topbar {
