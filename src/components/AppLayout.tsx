@@ -10,6 +10,7 @@ import {
   IconWeek,
 } from './Icons'
 import { LiveClock } from './LiveClock'
+import { enterImmersive } from '../lib/immersive'
 
 export function AppLayout() {
   return (
@@ -57,7 +58,9 @@ export function AppLayout() {
             className="nav-refresh"
             title="Yenile"
             aria-label="Sayfayı yenile"
-            onClick={() => window.location.reload()}
+            onClick={() => {
+              void enterImmersive().finally(() => window.location.reload())
+            }}
           >
             <IconRefresh />
           </button>

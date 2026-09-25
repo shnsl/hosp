@@ -388,8 +388,8 @@ textarea {
   z-index: 10;
 }
 
-/* Tam ekran PWA: güvenli alan boşluğunu azalt */
-@media (display-mode: fullscreen) {
+/* Tam ekran / immersive: güvenli alan boşluğunu kaldır */
+@media (display-mode: fullscreen), (display-mode: standalone) {
   .topbar {
     padding-top: 0.55rem;
   }
@@ -397,6 +397,27 @@ textarea {
   .app-shell {
     min-height: 100dvh;
   }
+}
+
+html.is-immersive .topbar,
+html:fullscreen .topbar,
+html:-webkit-full-screen .topbar {
+  padding-top: 0.45rem;
+}
+
+html:fullscreen,
+html:-webkit-full-screen {
+  background: var(--bg);
+}
+
+html:fullscreen body,
+html:-webkit-full-screen body,
+html:fullscreen #root,
+html:-webkit-full-screen #root,
+html:fullscreen .app-shell,
+html:-webkit-full-screen .app-shell {
+  min-height: 100%;
+  height: 100%;
 }
 
 .brand-with-clock {

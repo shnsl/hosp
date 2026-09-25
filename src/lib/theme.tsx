@@ -44,10 +44,14 @@ export function applyTheme(theme: Theme, accent: AccentId) {
   document.documentElement.setAttribute('data-theme', theme)
   document.documentElement.setAttribute('data-accent', accent)
   document.documentElement.style.colorScheme = theme
-  const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) {
-    meta.setAttribute('content', accentThemeColor(accent, theme))
-  }
+  const immersive =
+    document.documentElement.classList.contains('is-immersive') ||
+    Boolean(document.fullscreenElement) ||
+    window.matchMedia('(display-mode: fullscreen)').matches
+  const color = immersive ? '#000000' : accentThemeColor(accent, theme)
+  document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
+    meta.setAttribute('content', color)
+  })
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

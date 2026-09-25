@@ -15,14 +15,16 @@ export default defineConfig({
         name: 'AJAN',
         short_name: 'AJAN',
         description: 'Ev ziyareti planlama ve rota önerisi',
-        theme_color: '#0f6568',
-        background_color: '#eef5f5',
+        theme_color: '#000000',
+        background_color: '#000000',
         display: 'fullscreen',
         display_override: ['fullscreen', 'standalone', 'minimal-ui'],
         orientation: 'portrait-primary',
         lang: 'tr',
         start_url: base,
         scope: base,
+        categories: ['medical', 'productivity'],
+        prefer_related_applications: false,
         icons: [
           {
             src: 'pwa-192.png',
