@@ -3,6 +3,7 @@ import {
   IconAgenda,
   IconExceptions,
   IconPatients,
+  IconRefresh,
   IconSearch,
   IconSettings,
   IconTracking,
@@ -51,6 +52,15 @@ export function AppLayout() {
           <NavLink to="/settings" title="Ayarlar" aria-label="Ayarlar">
             <IconSettings />
           </NavLink>
+          <button
+            type="button"
+            className="nav-refresh"
+            title="Yenile"
+            aria-label="Sayfayı yenile"
+            onClick={() => window.location.reload()}
+          >
+            <IconRefresh />
+          </button>
         </nav>
       </header>
       <main className="main">

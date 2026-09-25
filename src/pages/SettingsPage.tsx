@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
-import { IconCheck, IconLogout } from '../components/Icons'
+import { IconCheck, IconFingerprint, IconLogout } from '../components/Icons'
 import {
   defaultDayScheduleSettings,
   saveDayScheduleSettings,
@@ -10,10 +10,16 @@ import {
 import { rebuildAllSchedulesWithSettings } from '../features/agenda/schedule'
 import { ACCENTS } from '../lib/accents'
 import { DEFAULT_PIN, pinSchema, useAuth } from '../lib/auth'
+import {
+  canUsePlatformBiometric,
+  clearBiometricLogin,
+  hasBiometricLogin,
+  registerBiometricLogin,
+} from '../lib/biometrics'
 import { WEEKDAYS, type Weekday } from '../lib/dates'
 import { useTheme } from '../lib/theme'
 
-type SectionId = 'schedule' | 'appearance' | 'pin' | 'session'
+type SectionId = 'schedule' | 'appearance' | 'pin' | 'bio' | 'session'
 
 /** Sadece rakam; 0845 → 08:45 */
 function filterTimeInput(raw: string): string {
@@ -67,6 +73,12 @@ export function SettingsPage() {
   const [scheduleMessage, setScheduleMessage] = useState<string | null>(null)
   const [scheduleError, setScheduleError] = useState<string | null>(null)
   const [openSection, setOpenSection] = useState<SectionId | null>(null)
+  const [bioSupported, setBioSupported] = useState(false)
+  const [bioEnabled, setBioEnabled] = useState(false)
+  const [bioPin, setBioPin] = useState('')
+  const [bioBusy, setBioBusy] = useState(false)
+  const [bioMessage, setBioMessage] = useState<string | null>(null)
+  const [bioError, setBioError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!practiceId) return
@@ -74,6 +86,19 @@ export function SettingsPage() {
       setScheduleError(e.message),
     )
   }, [practiceId])
+
+  useEffect(() => {
+    let active = true
+    void (async () => {
+      const ok = await canUsePlatformBiometric()
+      if (!active) return
+      setBioSupported(ok)
+      setBioEnabled(ok && hasBiometricLogin())
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   function toggleSection(id: SectionId) {
     setOpenSection((prev) => (prev === id ? null : id))
@@ -127,6 +152,34 @@ export function SettingsPage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  async function onEnableBio(e: FormEvent) {
+    e.preventDefault()
+    setBioError(null)
+    setBioMessage(null)
+    if (!pinSchema.test(bioPin)) {
+      setBioError('Şifre 6 haneli olmalı')
+      return
+    }
+    setBioBusy(true)
+    try {
+      await registerBiometricLogin(bioPin)
+      setBioEnabled(true)
+      setBioPin('')
+      setBioMessage('Parmak izi girişi açıldı')
+    } catch (err) {
+      setBioError(err instanceof Error ? err.message : 'Kaydedilemedi')
+    } finally {
+      setBioBusy(false)
+    }
+  }
+
+  function onDisableBio() {
+    clearBiometricLogin()
+    setBioEnabled(false)
+    setBioMessage('Parmak izi girişi kapatıldı')
+    setBioError(null)
   }
 
   return (
@@ -296,6 +349,64 @@ export function SettingsPage() {
             <IconCheck />
           </button>
         </form>
+      </SettingsSection>
+
+      <SettingsSection
+        id="bio"
+        title="Parmak İzi"
+        open={openSection === 'bio'}
+        onToggle={toggleSection}
+      >
+        {!bioSupported ? (
+          <p className="muted small">
+            Bu cihazda veya tarayıcıda biyometrik giriş yok. HTTPS ve parmak izi /
+            yüz tanıma destekli bir mobil tarayıcı gerekir.
+          </p>
+        ) : bioEnabled ? (
+          <>
+            <p className="muted small">Girişte parmak izi / yüz tanıma açık.</p>
+            {bioMessage && <p className="success">{bioMessage}</p>}
+            <button
+              className="btn danger"
+              type="button"
+              onClick={onDisableBio}
+            >
+              Parmak izi girişini kapat
+            </button>
+          </>
+        ) : (
+          <form className="stack" onSubmit={(e) => void onEnableBio(e)}>
+            <p className="muted small">
+              Açmak için mevcut 6 haneli şifreni gir; cihaz biyometrisi kaydedilir.
+            </p>
+            <label>
+              Şifre
+              <input
+                className="pin-input"
+                type="password"
+                inputMode="numeric"
+                value={bioPin}
+                onChange={(e) =>
+                  setBioPin(e.target.value.replace(/\D/g, '').slice(0, 6))
+                }
+              />
+            </label>
+            {bioError && (
+              <p className="error" role="alert">
+                {bioError}
+              </p>
+            )}
+            {bioMessage && <p className="success">{bioMessage}</p>}
+            <button
+              className="btn primary"
+              type="submit"
+              disabled={bioBusy || bioPin.length !== 6}
+            >
+              <IconFingerprint />{' '}
+              {bioBusy ? 'Bekle…' : 'Parmak izini kaydet'}
+            </button>
+          </form>
+        )}
       </SettingsSection>
 
       <SettingsSection

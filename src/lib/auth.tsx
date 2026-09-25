@@ -25,6 +25,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { UserProfile } from '../types'
+import { updateBiometricPin } from './biometrics'
 import { auth, db } from './firebase'
 
 export const HOSP_AUTH_EMAIL =
@@ -269,6 +270,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await updatePassword(currentUser, nextPin)
 
     await markPinUpdated(currentUser.uid)
+    updateBiometricPin(nextPin)
   }, [])
 
   const logout = useCallback(async () => {

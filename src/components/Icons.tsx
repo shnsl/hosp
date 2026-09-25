@@ -217,3 +217,24 @@ export function IconDown({ className }: { className?: string }) {
     </svg>
   )
 }
+
+export function IconFingerprint({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="1em" height="1em" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 11c0 3-1.5 5.5-3 7.5M12 11c0-2.2 1.8-4 4-4s4 1.8 4 4c0 5-2 8.5-5 11M12 11c0-3.3-2.7-6-6-6S0 7.7 0 11"
+        transform="translate(2 1)"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+      <path
+        d="M8 12.5c.4 2.2 1.5 4 2.8 5.5M14.5 8.5c1 .8 1.5 2 1.5 3.5 0 2.5-.8 4.5-2 6"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
