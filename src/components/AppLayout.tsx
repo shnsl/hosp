@@ -32,18 +32,6 @@ export function AppLayout() {
           </Link>
         </div>
         <nav className="nav" aria-label="Ana menü">
-          <NavLink to="/" end title="Günlük Plan" aria-label="Günlük Plan">
-            <IconAgenda />
-          </NavLink>
-          <NavLink to="/week" title="Haftalık Plan" aria-label="Haftalık Plan">
-            <IconWeek />
-          </NavLink>
-          <NavLink to="/patients" title="Hastalar" aria-label="Hastalar">
-            <IconPatients />
-          </NavLink>
-          <NavLink to="/tracking" title="Özet" aria-label="Özet">
-            <IconTracking />
-          </NavLink>
           <NavLink to="/search" title="Ara" aria-label="Ara">
             <IconSearch />
           </NavLink>
@@ -64,6 +52,18 @@ export function AppLayout() {
           >
             <IconRefresh />
           </button>
+          <NavLink to="/" end title="Günlük Plan" aria-label="Günlük Plan">
+            <IconAgenda />
+          </NavLink>
+          <NavLink to="/week" title="Haftalık Plan" aria-label="Haftalık Plan">
+            <IconWeek />
+          </NavLink>
+          <NavLink to="/patients" title="Hastalar" aria-label="Hastalar">
+            <IconPatients />
+          </NavLink>
+          <NavLink to="/tracking" title="Özet" aria-label="Özet">
+            <IconTracking />
+          </NavLink>
         </nav>
       </header>
       <main className="main">
