@@ -127,6 +127,15 @@ export function DailyPlanPage() {
     [allVisits, weekday],
   )
 
+  const visitRouteKey = useMemo(
+    () =>
+      [...visits]
+        .sort((a, b) => a.order - b.order || a.startTime.localeCompare(b.startTime))
+        .map((v) => `${v.id}:${v.order}:${v.patientId}:${v.status}`)
+        .join('|'),
+    [visits],
+  )
+
   const weeklyVisitCount = useMemo(() => {
     const m = new Map<string, number>()
     for (const v of allVisits) {
@@ -187,13 +196,60 @@ export function DailyPlanPage() {
       (v) => effectiveVisitStatus(v, weekday) !== 'cancelled',
     )
     const last = active[active.length - 1]
+    let driveKm =
+      Math.round(legs.reduce((sum, leg) => sum + leg.distanceKm, 0) * 10) / 10
+    let driveMin = legs.reduce((sum, leg) => sum + leg.durationMin, 0)
+    if (legs.length === 0 && active.length >= 2) {
+      for (let i = 0; i < active.length - 1; i++) {
+        const endMin = timeToMinutes(
+          endTimeOf(active[i].startTime, active[i].durationMin || dayTiming.durationMin),
+        )
+        const nextMin = timeToMinutes(active[i + 1].startTime)
+        driveMin += Math.max(0, nextMin - endMin)
+      }
+    }
     return {
       end: last
         ? endTimeOf(last.startTime, last.durationMin || dayTiming.durationMin)
         : null,
       count: sorted.length,
+      driveKm,
+      driveMin,
     }
-  }, [sorted, weekday, dayTiming.durationMin])
+  }, [sorted, weekday, dayTiming.durationMin, legs])
+
+  useEffect(() => {
+    if (!practiceId || sorted.length < 2 || patientMap.size === 0) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const skipVisitIds = new Set(
+          sorted
+            .filter((v) => effectiveVisitStatus(v, weekday) === 'cancelled')
+            .map((v) => v.id),
+        )
+        const schedule = await buildDaySchedule(sorted, patientMap, {
+          skipVisitIds,
+          dayStart: dayTiming.startTime,
+          visitDurationMin: dayTiming.durationMin,
+        })
+        if (!cancelled) setLegs(schedule.legs)
+      } catch {
+        /* özet satırı boşluklardan dakikayı yine gösterir */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    practiceId,
+    weekday,
+    visitRouteKey,
+    patientMap,
+    dayTiming.startTime,
+    dayTiming.durationMin,
+    sorted,
+  ])
 
   async function reschedule(ordered: Visit[]) {
     if (!practiceId) return
@@ -459,18 +515,25 @@ export function DailyPlanPage() {
       </div>
 
       <p className="muted small schedule-rules">
-        İlk hasta <strong>{dayTiming.startTime}</strong> · her hastada{' '}
+        <strong>{dayTiming.startTime}</strong> ·{' '}
         <strong>{dayTiming.durationMin} dk</strong>
         {daySummary ? (
           <>
             {daySummary.end ? (
               <>
                 {' '}
-                · tahmini bitiş <strong>{daySummary.end}</strong>
+                · <strong>{daySummary.end}</strong>
               </>
             ) : null}
             {' '}
             · <strong>{daySummary.count}</strong> hasta
+            {daySummary.driveMin > 0 || daySummary.driveKm > 0 ? (
+              <>
+                {' '}
+                · <strong>{daySummary.driveKm} km</strong> ·{' '}
+                <strong>{daySummary.driveMin} dk</strong>
+              </>
+            ) : null}
           </>
         ) : null}
         {scheduling ? ' · hesaplanıyor…' : ''}
