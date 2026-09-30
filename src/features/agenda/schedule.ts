@@ -1,4 +1,5 @@
 import type { LatLng, Patient, Visit, Weekday } from '../../types'
+import { isStopVisit } from '../../types'
 import { db } from '../../lib/firebase'
 import { collection, getDocs } from 'firebase/firestore'
 import { WEEKDAYS } from '../../lib/dates'
@@ -36,6 +37,29 @@ export function endTimeOf(startTime: string, durationMin = VISIT_DURATION_MIN): 
   return addMinutesToTime(startTime, durationMin)
 }
 
+function visitPoint(v: Visit, patientMap: Map<string, Patient>): LatLng {
+  if (isStopVisit(v)) {
+    if (v.stopLat == null || v.stopLng == null) {
+      throw new Error(`“${v.stopName ?? 'Durak'}” konum eksik`)
+    }
+    return { lat: v.stopLat, lng: v.stopLng }
+  }
+  const p = patientMap.get(v.patientId)
+  if (!p || p.lat == null || p.lng == null) {
+    throw new Error(
+      'Tüm hastalarda enlem/boylam olmalı. Eksik konumu hasta kartından gir.',
+    )
+  }
+  return { lat: p.lat, lng: p.lng }
+}
+
+function stayMin(v: Visit, defaultMin: number): number {
+  if (isStopVisit(v)) {
+    return Math.max(1, v.durationMin || 1)
+  }
+  return v.durationMin || defaultMin
+}
+
 /**
  * İlk aktif hasta dayStart'ta başlar.
  * skipVisitIds içindeki ziyaretler rota/saatten çıkar (sırada kalır).
@@ -61,22 +85,13 @@ export async function buildDaySchedule(
         id: v.id,
         order: i,
         startTime: v.startTime || dayStart,
-        durationMin: v.durationMin || visitDurationMin,
+        durationMin: stayMin(v, visitDurationMin),
       })),
       legs: [],
     }
   }
 
-  const points: LatLng[] = []
-  for (const v of active) {
-    const p = patientMap.get(v.patientId)
-    if (!p || p.lat == null || p.lng == null) {
-      throw new Error(
-        'Tüm hastalarda enlem/boylam olmalı. Eksik konumu hasta kartından gir.',
-      )
-    }
-    points.push({ lat: p.lat, lng: p.lng })
-  }
+  const points: LatLng[] = active.map((v) => visitPoint(v, patientMap))
 
   let durationMinMatrix: number[][] = [[0]]
   let distanceKmMatrix: number[][] = [[0]]
@@ -93,7 +108,8 @@ export async function buildDaySchedule(
 
   for (let i = 0; i < active.length; i++) {
     const v = active[i]
-    activeTimes.set(v.id, { startTime: time, durationMin: visitDurationMin })
+    const stay = stayMin(v, visitDurationMin)
+    activeTimes.set(v.id, { startTime: time, durationMin: stay })
 
     if (i < active.length - 1) {
       const driveRaw = durationMinMatrix[i][i + 1]
@@ -107,7 +123,7 @@ export async function buildDaySchedule(
         distanceKm: Math.round(km * 10) / 10,
         durationMin: drive,
       })
-      time = addMinutesToTime(time, visitDurationMin + drive)
+      time = addMinutesToTime(time, stay + drive)
     }
   }
 
@@ -117,7 +133,7 @@ export async function buildDaySchedule(
       id: v.id,
       order: i,
       startTime: timed?.startTime ?? v.startTime ?? dayStart,
-      durationMin: timed?.durationMin ?? v.durationMin ?? visitDurationMin,
+      durationMin: timed?.durationMin ?? stayMin(v, visitDurationMin),
     }
   })
 
@@ -186,6 +202,10 @@ export async function rebuildAllSchedulesWithSettings(
         typeof data.durationMin === 'number' ? data.durationMin : VISIT_DURATION_MIN,
       status: (data.status as Visit['status']) || 'planned',
       statusDate: typeof data.statusDate === 'string' ? data.statusDate : null,
+      kind: data.kind === 'stop' ? 'stop' : 'patient',
+      stopName: typeof data.stopName === 'string' ? data.stopName : null,
+      stopLat: typeof data.stopLat === 'number' ? data.stopLat : null,
+      stopLng: typeof data.stopLng === 'number' ? data.stopLng : null,
       createdAt: '',
       updatedAt: '',
     }

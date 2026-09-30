@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { IconCheck, IconClose, IconFinishDay, IconPlus, IconRefresh, IconRoute, IconTrash } from '../components/Icons'
+import { CoordsField } from '../components/CoordsField'
+import { IconCheck, IconClose, IconFinishDay, IconMap, IconPlus, IconRefresh, IconRoute, IconTrash } from '../components/Icons'
 import { SortableList } from '../components/SortableList'
 import { useConfirm } from '../components/useConfirm'
 import {
@@ -14,8 +15,10 @@ import {
   subscribeDayScheduleSettings,
   timingForWeekday,
 } from '../features/agenda/daySettings'
-import { subscribePatients } from '../features/patients/api'
+import { advancePatientSessionOnDone, subscribePatients } from '../features/patients/api'
+import { subscribeStops } from '../features/stops/api'
 import { suggestRoute, patientToAcceptWindow, timeToMinutes } from '../features/routing/optimize'
+import { tryParseLatLng } from '../features/routing/coords'
 import {
   clearAllAttendance,
   clearAttendance,
@@ -23,6 +26,7 @@ import {
   upsertAttendance,
 } from '../features/attendance/api'
 import {
+  createStopVisit,
   createVisit,
   deleteVisit,
   migrateVisitsToWeekday,
@@ -41,7 +45,7 @@ import {
   weekdayLabel,
   type Weekday,
 } from '../lib/dates'
-import type { LatLng, Patient, Visit, VisitStatus } from '../types'
+import { isStopVisit, type LatLng, type Patient, type Stop, type Visit, type VisitStatus } from '../types'
 
 const MIGRATE_KEY = 'hosp-visits-weekday-migrated'
 
@@ -59,6 +63,7 @@ export function DailyPlanPage() {
     initialWeekday(searchParams.get('day')),
   )
   const [patients, setPatients] = useState<Patient[]>([])
+  const [stops, setStops] = useState<Stop[]>([])
   const [allVisits, setAllVisits] = useState<Visit[]>([])
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -67,6 +72,21 @@ export function DailyPlanPage() {
   const [legs, setLegs] = useState<ScheduleLeg[]>([])
   const [startPickerOpen, setStartPickerOpen] = useState(false)
   const [addPatientOpen, setAddPatientOpen] = useState(false)
+  const [addStopOpen, setAddStopOpen] = useState(false)
+  const [libraryStop, setLibraryStop] = useState<Stop | null>(null)
+  const [libraryWaitMin, setLibraryWaitMin] = useState('10')
+  const [libraryAfterPatient, setLibraryAfterPatient] = useState('0')
+  const [libraryWaitError, setLibraryWaitError] = useState<string | null>(null)
+  const [pendingPatient, setPendingPatient] = useState<Patient | null>(null)
+  const [patientAfter, setPatientAfter] = useState('0')
+  const [patientInsertError, setPatientInsertError] = useState<string | null>(null)
+  const [stopModalOpen, setStopModalOpen] = useState(false)
+  const [stopName, setStopName] = useState('')
+  const [stopCoords, setStopCoords] = useState('')
+  const [stopWaitMin, setStopWaitMin] = useState('10')
+  const [stopAfterPatient, setStopAfterPatient] = useState('0')
+  const [stopBusy, setStopBusy] = useState(false)
+  const [stopError, setStopError] = useState<string | null>(null)
   const [finishingDay, setFinishingDay] = useState(false)
   const [daySettings, setDaySettings] = useState(defaultDayScheduleSettings)
 
@@ -85,6 +105,11 @@ export function DailyPlanPage() {
     return subscribePatients(practiceId, (list) => {
       setPatients(list.filter((p) => p.active))
     })
+  }, [practiceId])
+
+  useEffect(() => {
+    if (!practiceId) return
+    return subscribeStops(practiceId, setStops, (e) => setError(e.message))
   }, [practiceId])
 
   useEffect(() => {
@@ -139,6 +164,7 @@ export function DailyPlanPage() {
   const weeklyVisitCount = useMemo(() => {
     const m = new Map<string, number>()
     for (const v of allVisits) {
+      if (isStopVisit(v) || !v.patientId) continue
       m.set(v.patientId, (m.get(v.patientId) ?? 0) + 1)
     }
     return m
@@ -167,6 +193,7 @@ export function DailyPlanPage() {
     let done = 0
     let cancelled = 0
     for (const v of sorted) {
+      if (isStopVisit(v)) continue
       const s = effectiveVisitStatus(v, weekday)
       if (s === 'done') done += 1
       if (s === 'cancelled') cancelled += 1
@@ -174,8 +201,16 @@ export function DailyPlanPage() {
     return { done, cancelled }
   }, [sorted, weekday])
 
+  const patientSlotCount = useMemo(
+    () => sorted.filter((v) => !isStopVisit(v)).length,
+    [sorted],
+  )
+
   const plannedPatientIds = useMemo(
-    () => new Set(sorted.map((v) => v.patientId)),
+    () =>
+      new Set(
+        sorted.filter((v) => !isStopVisit(v) && v.patientId).map((v) => v.patientId),
+      ),
     [sorted],
   )
 
@@ -212,7 +247,7 @@ export function DailyPlanPage() {
       end: last
         ? endTimeOf(last.startTime, last.durationMin || dayTiming.durationMin)
         : null,
-      count: sorted.length,
+      count: sorted.filter((v) => !isStopVisit(v)).length,
       driveKm,
       driveMin,
     }
@@ -279,36 +314,44 @@ export function DailyPlanPage() {
     }
   }
 
-  async function addPatient(patient: Patient) {
-    if (!practiceId) return
+  async function addPatient() {
+    if (!practiceId || !pendingPatient) return
     setError(null)
-    setBusyId(patient.id)
+    setPatientInsertError(null)
+    const afterNum = Number(patientAfter)
+    if (!Number.isInteger(afterNum) || afterNum < 0 || afterNum > patientSlotCount) {
+      setPatientInsertError('Eklenme sırası geçersiz')
+      return
+    }
+    const insertAt = insertIndexAfterPatient(afterNum, sorted)
+    setBusyId(pendingPatient.id)
     try {
       const newId = await createVisit(
         practiceId,
         {
-          patientId: patient.id,
+          patientId: pendingPatient.id,
           weekday,
           startTime: dayTiming.startTime,
           durationMin: dayTiming.durationMin,
           status: 'planned',
         },
-        sorted.length,
+        insertAt,
       )
-      const next: Visit[] = [
-        ...sorted,
-        {
-          id: newId,
-          patientId: patient.id,
-          weekday,
-          startTime: dayTiming.startTime,
-          order: sorted.length,
-          durationMin: dayTiming.durationMin,
-          status: 'planned',
-          createdAt: '',
-          updatedAt: '',
-        },
-      ]
+      const visit: Visit = {
+        id: newId,
+        patientId: pendingPatient.id,
+        weekday,
+        startTime: dayTiming.startTime,
+        order: insertAt,
+        durationMin: dayTiming.durationMin,
+        status: 'planned',
+        kind: 'patient',
+        createdAt: '',
+        updatedAt: '',
+      }
+      const next = [...sorted]
+      next.splice(insertAt, 0, visit)
+      closePatientInsertPrompt()
       await reschedule(next)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Eklenemedi')
@@ -317,11 +360,167 @@ export function DailyPlanPage() {
     }
   }
 
+  function openPatientInsertPrompt(patient: Patient) {
+    setPendingPatient(patient)
+    setPatientAfter(String(patientSlotCount))
+    setPatientInsertError(null)
+  }
+
+  function closePatientInsertPrompt() {
+    setPendingPatient(null)
+    setPatientInsertError(null)
+  }
+
+  function openStopModal() {
+    setStopName('')
+    setStopCoords('')
+    setStopWaitMin('10')
+    setStopAfterPatient(String(patientSlotCount))
+    setStopError(null)
+    setStopModalOpen(true)
+  }
+
+  function closeStopModal() {
+    setStopModalOpen(false)
+    setStopError(null)
+    setStopBusy(false)
+  }
+
+  function insertIndexAfterPatient(afterPatientNum: number, list: Visit[]): number {
+    if (afterPatientNum <= 0) return 0
+    let seen = 0
+    for (let i = 0; i < list.length; i++) {
+      if (isStopVisit(list[i])) continue
+      seen += 1
+      if (seen === afterPatientNum) return i + 1
+    }
+    return list.length
+  }
+
+  function openLibraryStopPrompt(stop: Stop) {
+    setLibraryStop(stop)
+    setLibraryWaitMin(String(stop.waitMin))
+    setLibraryAfterPatient(String(patientSlotCount))
+    setLibraryWaitError(null)
+  }
+
+  function closeLibraryStopPrompt() {
+    setLibraryStop(null)
+    setLibraryWaitError(null)
+  }
+
+  async function addStopFromLibrary() {
+    if (!practiceId || !libraryStop) return
+    setError(null)
+    setLibraryWaitError(null)
+    const wait = Number(libraryWaitMin)
+    if (!Number.isInteger(wait) || wait < 1 || wait > 60) {
+      setLibraryWaitError('Bekleme 1–60 dk olmalı')
+      return
+    }
+    const afterNum = Number(libraryAfterPatient)
+    if (!Number.isInteger(afterNum) || afterNum < 0 || afterNum > patientSlotCount) {
+      setLibraryWaitError('Eklenme sırası geçersiz')
+      return
+    }
+    const insertAt = insertIndexAfterPatient(afterNum, sorted)
+    setBusyId(libraryStop.id)
+    try {
+      const newId = await createStopVisit(practiceId, {
+        weekday,
+        startTime: dayTiming.startTime,
+        order: insertAt,
+        stopName: libraryStop.name,
+        stopLat: libraryStop.lat,
+        stopLng: libraryStop.lng,
+        durationMin: wait,
+      })
+      const stopVisit: Visit = {
+        id: newId,
+        patientId: '',
+        weekday,
+        startTime: dayTiming.startTime,
+        order: insertAt,
+        durationMin: wait,
+        status: 'planned',
+        kind: 'stop',
+        stopName: libraryStop.name,
+        stopLat: libraryStop.lat,
+        stopLng: libraryStop.lng,
+        createdAt: '',
+        updatedAt: '',
+      }
+      const next = [...sorted]
+      next.splice(insertAt, 0, stopVisit)
+      closeLibraryStopPrompt()
+      await reschedule(next)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Durak eklenemedi')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function addStop() {
+    if (!practiceId) return
+    setStopBusy(true)
+    setStopError(null)
+    try {
+      const name = stopName.trim()
+      if (!name) throw new Error('Durak adı gerekli')
+      const parsed = tryParseLatLng(stopCoords)
+      if (!parsed) throw new Error('Haritadan konum seç')
+      const wait = Number(stopWaitMin)
+      if (!Number.isInteger(wait) || wait < 1 || wait > 60) {
+        throw new Error('Bekleme 1–60 dk olmalı')
+      }
+      const afterNum = Number(stopAfterPatient)
+      if (!Number.isInteger(afterNum) || afterNum < 0 || afterNum > patientSlotCount) {
+        throw new Error('Eklenme sırası geçersiz')
+      }
+      const insertAt = insertIndexAfterPatient(afterNum, sorted)
+      const newId = await createStopVisit(practiceId, {
+        weekday,
+        startTime: dayTiming.startTime,
+        order: insertAt,
+        stopName: name,
+        stopLat: parsed.lat,
+        stopLng: parsed.lng,
+        durationMin: wait,
+      })
+      const stopVisit: Visit = {
+        id: newId,
+        patientId: '',
+        weekday,
+        startTime: dayTiming.startTime,
+        order: insertAt,
+        durationMin: wait,
+        status: 'planned',
+        kind: 'stop',
+        stopName: name,
+        stopLat: parsed.lat,
+        stopLng: parsed.lng,
+        createdAt: '',
+        updatedAt: '',
+      }
+      const next = [...sorted]
+      next.splice(insertAt, 0, stopVisit)
+      closeStopModal()
+      await reschedule(next)
+    } catch (err) {
+      setStopError(err instanceof Error ? err.message : 'Durak eklenemedi')
+    } finally {
+      setStopBusy(false)
+    }
+  }
+
   async function removeVisit(visit: Visit) {
     if (!practiceId) return
-    const name = patientMap.get(visit.patientId)?.name ?? 'Hasta'
+    const name = isStopVisit(visit)
+      ? visit.stopName ?? 'Durak'
+      : patientMap.get(visit.patientId)?.name ?? 'Hasta'
     const ok = await confirm({
-      title: 'Plandan çıkar',
+      title: isStopVisit(visit) ? 'Durağı sil' : 'Plandan çıkar',
       message: `“${name}” bu günün planından silinsin mi?`,
       confirmLabel: 'Sil',
     })
@@ -344,7 +543,7 @@ export function DailyPlanPage() {
   }
 
   async function setVisitAttendance(visit: Visit, next: VisitStatus) {
-    if (!practiceId) return
+    if (!practiceId || isStopVisit(visit)) return
     const current = effectiveVisitStatus(visit, weekday)
     const status: VisitStatus = current === next ? 'planned' : next
     const statusDate = status === 'planned' ? null : occurrenceIsoForWeekday(weekday)
@@ -356,6 +555,22 @@ export function DailyPlanPage() {
       } else if (status === 'done' || status === 'cancelled') {
         await upsertAttendance(practiceId, visit.patientId, occ, status)
       }
+
+      // Alındı’ya geçişte seans hakkını ilerlet
+      if (status === 'done' && current !== 'done') {
+        const patient = patientMap.get(visit.patientId)
+        if (patient) {
+          const adv = await advancePatientSessionOnDone(practiceId, patient)
+          if (adv.exhausted) {
+            await confirm({
+              title: 'Hak bitti',
+              message: `“${patient.name}” için 3 dosya / seans hakkı dolu.\nYeni seans hakkı yok.`,
+              confirmLabel: 'Tamam',
+            })
+          }
+        }
+      }
+
       const updated = sorted.map((v) =>
         v.id === visit.id ? { ...v, status, statusDate } : v,
       )
@@ -369,6 +584,7 @@ export function DailyPlanPage() {
     if (!practiceId) return
     const occ = occurrenceIsoForWeekday(weekday)
     const marked = sorted.filter((v) => {
+      if (isStopVisit(v)) return false
       const s = effectiveVisitStatus(v, weekday)
       return s === 'done' || s === 'cancelled'
     })
@@ -461,6 +677,14 @@ export function DailyPlanPage() {
       const points: LatLng[] = []
       const windows = []
       for (const v of active) {
+        if (isStopVisit(v)) {
+          if (v.stopLat == null || v.stopLng == null) {
+            throw new Error(`“${v.stopName ?? 'Durak'}” konum eksik`)
+          }
+          points.push({ lat: v.stopLat, lng: v.stopLng })
+          windows.push({ fromMin: null, toMin: null })
+          continue
+        }
         const p = patientMap.get(v.patientId)
         if (!p || p.lat == null || p.lng == null) {
           throw new Error('Tüm hastalarda konum olmalı')
@@ -562,6 +786,16 @@ export function DailyPlanPage() {
             ) : null}
           </h2>
           <div className="row-actions">
+            <button
+              className="btn icon-action"
+              type="button"
+              aria-label="Durak ekle"
+              title="Durak ekle"
+              disabled={scheduling || stopBusy}
+              onClick={openStopModal}
+            >
+              <IconMap />
+            </button>
             {sorted.length > 0 ? (
               <>
                 <button
@@ -610,62 +844,87 @@ export function DailyPlanPage() {
             items={sorted}
             onReorder={(ids) => void onReorder(ids)}
             renderItem={(visit, index) => {
-              const patient = patientMap.get(visit.patientId)
-              const duration = visit.durationMin || dayTiming.durationMin
+              const stop = isStopVisit(visit)
+              const patient = stop ? undefined : patientMap.get(visit.patientId)
+              const duration = stop
+                ? Math.max(1, visit.durationMin || 1)
+                : visit.durationMin || dayTiming.durationMin
               const end = endTimeOf(visit.startTime, duration)
               const leg = legAfter.get(visit.id)
               const att = effectiveVisitStatus(visit, weekday)
-              const weekCount = weeklyVisitCount.get(visit.patientId) ?? 0
+              const weekCount = stop ? 0 : weeklyVisitCount.get(visit.patientId) ?? 0
               const weekTone =
                 weekCount === 2
                   ? 'is-week-2'
                   : weekCount === 3
                     ? 'is-week-3'
                     : 'is-week-other'
+              const patientNo = stop
+                ? 0
+                : sorted
+                    .slice(0, index + 1)
+                    .filter((v) => !isStopVisit(v)).length
               return (
                 <div
-                  className={`plan-item ${att === 'done' ? 'is-done' : ''} ${att === 'cancelled' ? 'is-cancelled' : ''}`}
+                  className={`plan-item ${stop ? 'is-stop' : ''} ${!stop && att === 'done' ? 'is-done' : ''} ${!stop && att === 'cancelled' ? 'is-cancelled' : ''}`}
                 >
                   <div className="plan-item-top">
                     <div className="plan-row-main">
-                      <span className="visit-order plan-order">{index + 1}</span>
+                      {stop ? (
+                        <span className="visit-order plan-order is-stop-order" aria-label="Durak">
+                          ·
+                        </span>
+                      ) : (
+                        <span className="visit-order plan-order">{patientNo}</span>
+                      )}
                       <div>
-                        <p className={`visit-name plan-name ${weekTone}`}>
-                          {patient?.name ?? 'Hasta'}
+                        <p className={`visit-name plan-name ${stop ? 'is-stop-name' : weekTone}`}>
+                          {stop ? visit.stopName || 'Durak' : patient?.name ?? 'Hasta'}
                         </p>
-                        {att !== 'cancelled' ? (
+                        {stop ? (
+                          <p className="muted plan-time">
+                            {visit.startTime} – {end} · bekleme {duration} dk
+                          </p>
+                        ) : att !== 'cancelled' ? (
                           <p className="muted plan-time">
                             {visit.startTime} – {end}
                           </p>
                         ) : (
                           <p className="muted small plan-time">İptal — saatten çıkarıldı</p>
                         )}
-                        {(!patient || patient.lat == null || patient.lng == null) && (
+                        {!stop && (!patient || patient.lat == null || patient.lng == null) && (
+                          <p className="warn small">Konum yok</p>
+                        )}
+                        {stop && (visit.stopLat == null || visit.stopLng == null) && (
                           <p className="warn small">Konum yok</p>
                         )}
                       </div>
                     </div>
                     <div className="plan-item-actions">
-                      <button
-                        className={`btn icon-action ${att === 'done' ? 'is-done-btn' : ''}`}
-                        type="button"
-                        aria-label="Alındı"
-                        title="Alındı"
-                        data-no-drag
-                        onClick={() => void setVisitAttendance(visit, 'done')}
-                      >
-                        <IconCheck />
-                      </button>
-                      <button
-                        className={`btn icon-action ${att === 'cancelled' ? 'is-cancel-btn' : ''}`}
-                        type="button"
-                        aria-label="İptal / alınamadı"
-                        title="İptal / alınamadı"
-                        data-no-drag
-                        onClick={() => void setVisitAttendance(visit, 'cancelled')}
-                      >
-                        <IconClose />
-                      </button>
+                      {!stop ? (
+                        <>
+                          <button
+                            className={`btn icon-action ${att === 'done' ? 'is-done-btn' : ''}`}
+                            type="button"
+                            aria-label="Alındı"
+                            title="Alındı"
+                            data-no-drag
+                            onClick={() => void setVisitAttendance(visit, 'done')}
+                          >
+                            <IconCheck />
+                          </button>
+                          <button
+                            className={`btn icon-action ${att === 'cancelled' ? 'is-cancel-btn' : ''}`}
+                            type="button"
+                            aria-label="İptal / alınamadı"
+                            title="İptal / alınamadı"
+                            data-no-drag
+                            onClick={() => void setVisitAttendance(visit, 'cancelled')}
+                          >
+                            <IconClose />
+                          </button>
+                        </>
+                      ) : null}
                       <button
                         className="btn danger icon-action"
                         type="button"
@@ -726,13 +985,54 @@ export function DailyPlanPage() {
                       type="button"
                       aria-label="Ekle"
                       disabled={busyId === p.id || scheduling || p.lat == null || p.lng == null}
-                      onClick={() => void addPatient(p)}
+                      onClick={() => openPatientInsertPrompt(p)}
                     >
                       {busyId === p.id ? '…' : <IconPlus />}
                     </button>
                   </li>
                 )
               })}
+            </ul>
+          )
+        ) : null}
+      </section>
+
+      <section className="panel add-patient-panel">
+        <button
+          type="button"
+          className="add-patient-toggle"
+          aria-expanded={addStopOpen}
+          onClick={() => setAddStopOpen((o) => !o)}
+        >
+          <h2>Durak Ekle</h2>
+          <span className="muted small" aria-hidden>
+            {addStopOpen ? '▲' : '▼'}
+          </span>
+        </button>
+        {addStopOpen ? (
+          stops.length === 0 ? (
+            <p className="muted">
+              Önce <Link to="/patients">hasta listesinden</Link> durak kaydı oluştur.
+            </p>
+          ) : (
+            <ul className="patient-pick-list">
+              {stops.map((s) => (
+                <li key={s.id}>
+                  <div>
+                    <strong className="pick-name is-stop-name">{s.name}</strong>
+                    <p className="muted small">{s.waitMin} dk bekleme</p>
+                  </div>
+                  <button
+                    className="btn primary icon-action"
+                    type="button"
+                    aria-label="Ekle"
+                    disabled={busyId === s.id || scheduling}
+                    onClick={() => openLibraryStopPrompt(s)}
+                  >
+                    {busyId === s.id ? '…' : <IconPlus />}
+                  </button>
+                </li>
+              ))}
             </ul>
           )
         ) : null}
@@ -769,18 +1069,31 @@ export function DailyPlanPage() {
             <ul className="start-picker-list">
               {sorted
                 .filter((v) => effectiveVisitStatus(v, weekday) !== 'cancelled')
-                .map((visit, index) => {
-                const patient = patientMap.get(visit.patientId)
+                .map((visit, index, activeList) => {
+                const stop = isStopVisit(visit)
+                const patient = stop ? undefined : patientMap.get(visit.patientId)
+                const label = stop
+                  ? visit.stopName || 'Durak'
+                  : patient?.name ?? 'Hasta'
+                const hasCoords = stop
+                  ? visit.stopLat != null && visit.stopLng != null
+                  : patient?.lat != null && patient?.lng != null
+                const patientNo = stop
+                  ? null
+                  : activeList.slice(0, index + 1).filter((v) => !isStopVisit(v))
+                      .length
                 return (
                   <li key={visit.id}>
                     <button
                       type="button"
                       className="start-picker-item"
-                      disabled={scheduling || patient?.lat == null || patient?.lng == null}
+                      disabled={scheduling || !hasCoords}
                       onClick={() => void optimizeOrderWithOsrm(visit.id)}
                     >
-                      <span className="week-order">{index + 1}</span>
-                      <span className="pick-name">{patient?.name ?? 'Hasta'}</span>
+                      <span className="week-order">
+                        {patientNo ?? '·'}
+                      </span>
+                      <span className="pick-name">{label}</span>
                     </button>
                   </li>
                 )
@@ -789,6 +1102,274 @@ export function DailyPlanPage() {
           </div>
         </div>
       )}
+
+      {libraryStop ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={closeLibraryStopPrompt}
+        >
+          <div
+            className="modal stop-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="library-stop-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="modal-header">
+              <h2 id="library-stop-title">{libraryStop.name}</h2>
+              <button
+                className="btn ghost icon-action"
+                type="button"
+                aria-label="Kapat"
+                onClick={closeLibraryStopPrompt}
+              >
+                <IconClose />
+              </button>
+            </header>
+            <form
+              className="stack"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void addStopFromLibrary()
+              }}
+            >
+              <label>
+                Bekleme (dk)
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={60}
+                  step={1}
+                  value={libraryWaitMin}
+                  onChange={(e) => setLibraryWaitMin(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </label>
+              <label>
+                Kaçıncı hastadan sonra
+                <select
+                  value={libraryAfterPatient}
+                  onChange={(e) => setLibraryAfterPatient(e.target.value)}
+                >
+                  <option value="0">Listenin başına</option>
+                  {Array.from({ length: patientSlotCount }, (_, i) => i + 1).map(
+                    (n) => (
+                      <option key={n} value={String(n)}>
+                        {n}. hastadan sonra
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              {libraryWaitError && (
+                <p className="error" role="alert">
+                  {libraryWaitError}
+                </p>
+              )}
+              <footer className="modal-footer">
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={closeLibraryStopPrompt}
+                  disabled={busyId === libraryStop.id}
+                >
+                  İptal
+                </button>
+                <button
+                  className="btn primary icon-action"
+                  type="submit"
+                  disabled={busyId === libraryStop.id}
+                  aria-label="Ekle"
+                >
+                  <IconCheck />
+                </button>
+              </footer>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {pendingPatient ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={closePatientInsertPrompt}
+        >
+          <div
+            className="modal stop-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="patient-insert-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="modal-header">
+              <h2 id="patient-insert-title">{pendingPatient.name}</h2>
+              <button
+                className="btn ghost icon-action"
+                type="button"
+                aria-label="Kapat"
+                onClick={closePatientInsertPrompt}
+              >
+                <IconClose />
+              </button>
+            </header>
+            <form
+              className="stack"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void addPatient()
+              }}
+            >
+              <label>
+                Kaçıncı hastadan sonra
+                <select
+                  value={patientAfter}
+                  onChange={(e) => setPatientAfter(e.target.value)}
+                >
+                  <option value="0">Listenin başına</option>
+                  {Array.from({ length: patientSlotCount }, (_, i) => i + 1).map(
+                    (n) => (
+                      <option key={n} value={String(n)}>
+                        {n}. hastadan sonra
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              {patientInsertError && (
+                <p className="error" role="alert">
+                  {patientInsertError}
+                </p>
+              )}
+              <footer className="modal-footer">
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={closePatientInsertPrompt}
+                  disabled={busyId === pendingPatient.id}
+                >
+                  İptal
+                </button>
+                <button
+                  className="btn primary icon-action"
+                  type="submit"
+                  disabled={busyId === pendingPatient.id}
+                  aria-label="Ekle"
+                >
+                  <IconCheck />
+                </button>
+              </footer>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {stopModalOpen ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={closeStopModal}
+        >
+          <div
+            className="modal stop-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="stop-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="modal-header">
+              <h2 id="stop-modal-title">Durak Ekle</h2>
+              <button
+                className="btn ghost icon-action"
+                type="button"
+                aria-label="Kapat"
+                onClick={closeStopModal}
+              >
+                <IconClose />
+              </button>
+            </header>
+            <form
+              className="stack"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void addStop()
+              }}
+            >
+              <label>
+                Durak adı
+                <input
+                  value={stopName}
+                  onChange={(e) => setStopName(e.target.value)}
+                  placeholder="ör. Eczane"
+                  required
+                  autoComplete="off"
+                />
+              </label>
+              <CoordsField
+                value={stopCoords}
+                onChange={setStopCoords}
+                required
+              />
+              <label>
+                Bekleme (dk)
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={60}
+                  step={1}
+                  value={stopWaitMin}
+                  onChange={(e) => setStopWaitMin(e.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                Kaçıncı hastadan sonra
+                <select
+                  value={stopAfterPatient}
+                  onChange={(e) => setStopAfterPatient(e.target.value)}
+                >
+                  <option value="0">Listenin başına</option>
+                  {Array.from({ length: patientSlotCount }, (_, i) => i + 1).map(
+                    (n) => (
+                      <option key={n} value={String(n)}>
+                        {n}. hastadan sonra
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              {stopError && (
+                <p className="error" role="alert">
+                  {stopError}
+                </p>
+              )}
+              <footer className="modal-footer">
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={closeStopModal}
+                  disabled={stopBusy}
+                >
+                  İptal
+                </button>
+                <button
+                  className="btn primary icon-action"
+                  type="submit"
+                  disabled={stopBusy}
+                  aria-label="Ekle"
+                >
+                  <IconCheck />
+                </button>
+              </footer>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
       {confirmDialog}
     </div>
   )

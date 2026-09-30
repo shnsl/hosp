@@ -13,6 +13,13 @@ import {
 import { z } from 'zod'
 import type { Patient } from '../../types'
 import { db } from '../../lib/firebase'
+import {
+  maxSessionFor,
+  parseFileSelect,
+  readSessionMeta,
+  recordSessionVisit,
+  type FileHalf,
+} from '../../lib/sessionMeta'
 import { formatLatLng, parseLatLngText } from '../routing/coords'
 import { deleteAttendanceForPatient } from '../attendance/api'
 import { deleteVisitsForPatient } from '../visits/api'
@@ -41,6 +48,10 @@ function mapPatient(id: string, data: Record<string, unknown>): Patient {
     active: data.active !== false,
     acceptFrom: typeof data.acceptFrom === 'string' && data.acceptFrom ? data.acceptFrom : null,
     acceptTo: typeof data.acceptTo === 'string' && data.acceptTo ? data.acceptTo : null,
+    sessionNo: typeof data.sessionNo === 'number' ? data.sessionNo : null,
+    fileNo: typeof data.fileNo === 'number' ? data.fileNo : null,
+    fileHalf:
+      data.fileHalf === 1 || data.fileHalf === 2 ? data.fileHalf : null,
     createdAt: String(data.createdAtIso ?? data.createdAt ?? ''),
     updatedAt: String(data.updatedAtIso ?? data.updatedAt ?? ''),
   }
@@ -137,6 +148,87 @@ export async function updatePatientAcceptWindow(
     updatedAt: serverTimestamp(),
     updatedAtIso: new Date().toISOString(),
   })
+}
+
+function normalizePositiveInt(
+  raw: string,
+  opts: { min: number; max: number; label: string },
+): number | null {
+  const t = raw.trim()
+  if (!t) return null
+  const n = Number(t)
+  if (!Number.isInteger(n) || n < opts.min || n > opts.max) {
+    throw new Error(`${opts.label} ${opts.min}–${opts.max} arası olmalı`)
+  }
+  return n
+}
+
+export async function updatePatientSessionMeta(
+  practiceId: string,
+  patientId: string,
+  meta: {
+    sessionNo: number | null
+    fileNo: number | null
+    fileHalf: 1 | 2 | null
+  },
+): Promise<void> {
+  await updateDoc(doc(db, 'practices', practiceId, 'patients', patientId), {
+    sessionNo: meta.sessionNo,
+    fileNo: meta.fileNo,
+    fileHalf: meta.fileHalf,
+    updatedAt: serverTimestamp(),
+    updatedAtIso: new Date().toISOString(),
+  })
+}
+
+export async function savePatientSessionMetaFromForm(
+  practiceId: string,
+  patientId: string,
+  sessionNoRaw: string,
+  fileSelectRaw: string,
+): Promise<void> {
+  if (!sessionNoRaw.trim() && !fileSelectRaw.trim()) {
+    await updatePatientSessionMeta(practiceId, patientId, {
+      sessionNo: null,
+      fileNo: null,
+      fileHalf: null,
+    })
+    return
+  }
+  const parsed = parseFileSelect(fileSelectRaw)
+  if (!parsed) throw new Error('Dosya seçimi geçersiz')
+  const max = maxSessionFor(parsed.fileHalf)
+  const sessionNo = normalizePositiveInt(sessionNoRaw, {
+    min: 0,
+    max,
+    label: 'Seans',
+  })
+  if (sessionNo == null) throw new Error('Seans seç')
+  await updatePatientSessionMeta(practiceId, patientId, {
+    fileNo: parsed.fileNo,
+    fileHalf: parsed.fileHalf,
+    sessionNo,
+  })
+}
+
+export async function advancePatientSessionOnDone(
+  practiceId: string,
+  patient: Patient,
+): Promise<{
+  exhausted: boolean
+  meta: { fileNo: number; sessionNo: number; fileHalf: FileHalf | null }
+}> {
+  const current = readSessionMeta({
+    fileNo: patient.fileNo,
+    sessionNo: patient.sessionNo,
+    fileHalf: patient.fileHalf,
+  })
+  const result = recordSessionVisit(current)
+  if (!result.ok) {
+    return { exhausted: true, meta: result.meta }
+  }
+  await updatePatientSessionMeta(practiceId, patient.id, result.meta)
+  return { exhausted: false, meta: result.meta }
 }
 
 /** "8:45" / "08:45" / "0845" → "08:45"; geçersizse null */

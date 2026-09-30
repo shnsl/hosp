@@ -1,17 +1,31 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { CoordsField } from '../components/CoordsField'
 import { IconCheck, IconClose, IconPlus, IconTrash } from '../components/Icons'
 import { useConfirm } from '../components/useConfirm'
 import {
   createPatient,
   deletePatient,
+  savePatientSessionMetaFromForm,
   subscribePatients,
   updatePatient,
   type PatientFormValues,
 } from '../features/patients/api'
+import {
+  createStop,
+  deleteStop,
+  subscribeStops,
+  type StopFormValues,
+} from '../features/stops/api'
 import { subscribeAllVisits } from '../features/visits/api'
 import { useAuth } from '../lib/auth'
-import type { Patient, Visit } from '../types'
+import {
+  FILE_SELECT_OPTIONS,
+  fileSelectValue,
+  formatSessionMetaShort,
+  maxSessionFor,
+  parseFileSelect,
+} from '../lib/sessionMeta'
+import type { Patient, Stop, Visit } from '../types'
 
 const emptyForm: PatientFormValues = {
   name: '',
@@ -22,22 +36,40 @@ const emptyForm: PatientFormValues = {
   active: true,
 }
 
-type SortKey = 'name' | 'sessions'
+const emptyStopForm: StopFormValues = {
+  name: '',
+  coords: '',
+  waitMin: 10,
+}
+
+type SortKey = 'name' | 'weekly' | 'sessionTotal'
 type SortDir = 'asc' | 'desc'
 
 const SORT_STORAGE_KEY = 'hosp-patient-list-sort'
+const SESSION_HOLD_MS = 1000
+const HOLD_MOVE_CANCEL_PX = 12
 
 function loadSort(): { key: SortKey; dir: SortDir } {
   try {
     const raw = localStorage.getItem(SORT_STORAGE_KEY)
     if (!raw) return { key: 'name', dir: 'asc' }
     const parsed = JSON.parse(raw) as { key?: string; dir?: string }
-    const key: SortKey = parsed.key === 'sessions' ? 'sessions' : 'name'
+    let key: SortKey = 'name'
+    if (parsed.key === 'weekly' || parsed.key === 'sessions') key = 'weekly'
+    else if (parsed.key === 'sessionTotal') key = 'sessionTotal'
     const dir: SortDir = parsed.dir === 'desc' ? 'desc' : 'asc'
     return { key, dir }
   } catch {
     return { key: 'name', dir: 'asc' }
   }
+}
+
+/** Dosya + seans → karşılaştırılabilir toplam ilerleme (0–90) */
+function sessionTotalProgress(p: Patient): number {
+  if (p.fileNo == null || p.sessionNo == null) return -1
+  const base = (p.fileNo - 1) * 30
+  if (p.fileHalf === 2) return base + 15 + p.sessionNo
+  return base + p.sessionNo
 }
 
 function patientToForm(p: Patient): PatientFormValues {
@@ -65,6 +97,22 @@ export function PatientsPage() {
   const [sortKey, setSortKey] = useState<SortKey>(() => loadSort().key)
   const [sortDir, setSortDir] = useState<SortDir>(() => loadSort().dir)
 
+  const [sessionPatient, setSessionPatient] = useState<Patient | null>(null)
+  const [sessionNo, setSessionNo] = useState('')
+  const [fileNo, setFileNo] = useState('')
+  const [sessionBusy, setSessionBusy] = useState(false)
+  const [sessionError, setSessionError] = useState<string | null>(null)
+
+  const [stops, setStops] = useState<Stop[]>([])
+  const [stopsOpen, setStopsOpen] = useState(false)
+  const [stopForm, setStopForm] = useState<StopFormValues>(emptyStopForm)
+  const [stopSubmitting, setStopSubmitting] = useState(false)
+  const [stopFormError, setStopFormError] = useState<string | null>(null)
+
+  const holdTimerRef = useRef<number | null>(null)
+  const holdStartRef = useRef<{ x: number; y: number } | null>(null)
+  const longPressOpenedRef = useRef(false)
+
   useEffect(() => {
     if (!practiceId) return
     return subscribePatients(practiceId, setPatients, (e) => setError(e.message))
@@ -76,8 +124,19 @@ export function PatientsPage() {
   }, [practiceId])
 
   useEffect(() => {
+    if (!practiceId) return
+    return subscribeStops(practiceId, setStops, (e) => setError(e.message))
+  }, [practiceId])
+
+  useEffect(() => {
     localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ key: sortKey, dir: sortDir }))
   }, [sortKey, sortDir])
+
+  useEffect(() => {
+    return () => {
+      if (holdTimerRef.current != null) window.clearTimeout(holdTimerRef.current)
+    }
+  }, [])
 
   const weeklyVisitCount = useMemo(() => {
     const counts = new Map<string, number>()
@@ -90,9 +149,15 @@ export function PatientsPage() {
   const sortedPatients = useMemo(() => {
     const list = [...patients]
     list.sort((a, b) => {
-      if (sortKey === 'sessions') {
+      if (sortKey === 'weekly') {
         const ca = weeklyVisitCount.get(a.id) ?? 0
         const cb = weeklyVisitCount.get(b.id) ?? 0
+        if (ca !== cb) return sortDir === 'asc' ? ca - cb : cb - ca
+        return a.name.localeCompare(b.name, 'tr')
+      }
+      if (sortKey === 'sessionTotal') {
+        const ca = sessionTotalProgress(a)
+        const cb = sessionTotalProgress(b)
         if (ca !== cb) return sortDir === 'asc' ? ca - cb : cb - ca
         return a.name.localeCompare(b.name, 'tr')
       }
@@ -108,7 +173,7 @@ export function PatientsPage() {
       return
     }
     setSortKey(key)
-    setSortDir(key === 'sessions' ? 'desc' : 'asc')
+    setSortDir(key === 'name' ? 'asc' : 'desc')
   }
 
   function openCreate() {
@@ -132,6 +197,70 @@ export function PatientsPage() {
     setEditingId(null)
     setForm(emptyForm)
     setMessage(null)
+  }
+
+  function openSessionPopup(patient: Patient) {
+    setSessionPatient(patient)
+    setSessionNo(patient.sessionNo != null ? String(patient.sessionNo) : '')
+    setFileNo(
+      patient.fileNo != null
+        ? fileSelectValue(patient.fileNo, patient.fileHalf ?? null)
+        : '',
+    )
+    setSessionError(null)
+  }
+
+  function closeSessionPopup() {
+    setSessionPatient(null)
+    setSessionNo('')
+    setFileNo('')
+    setSessionError(null)
+    setSessionBusy(false)
+  }
+
+  function clearHoldTimer() {
+    if (holdTimerRef.current != null) {
+      window.clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = null
+    }
+  }
+
+  function onCardPointerDown(e: ReactPointerEvent<HTMLButtonElement>, patient: Patient) {
+    if (e.button !== 0) return
+    longPressOpenedRef.current = false
+    holdStartRef.current = { x: e.clientX, y: e.clientY }
+    clearHoldTimer()
+    holdTimerRef.current = window.setTimeout(() => {
+      holdTimerRef.current = null
+      longPressOpenedRef.current = true
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(20)
+      }
+      openEdit(patient)
+    }, SESSION_HOLD_MS)
+  }
+
+  function onCardPointerMove(e: ReactPointerEvent<HTMLButtonElement>) {
+    const start = holdStartRef.current
+    if (!start || holdTimerRef.current == null) return
+    const dx = e.clientX - start.x
+    const dy = e.clientY - start.y
+    if (dx * dx + dy * dy > HOLD_MOVE_CANCEL_PX * HOLD_MOVE_CANCEL_PX) {
+      clearHoldTimer()
+    }
+  }
+
+  function onCardPointerEnd() {
+    clearHoldTimer()
+    holdStartRef.current = null
+  }
+
+  function onCardClick(patient: Patient) {
+    if (longPressOpenedRef.current) {
+      longPressOpenedRef.current = false
+      return
+    }
+    openSessionPopup(patient)
   }
 
   async function onSubmit(e: FormEvent) {
@@ -168,8 +297,59 @@ export function PatientsPage() {
     })
     if (!ok) return
     if (editingId === patient.id) closeForm()
+    if (sessionPatient?.id === patient.id) closeSessionPopup()
     await deletePatient(practiceId, patient.id)
   }
+
+  async function onSaveStop(e: FormEvent) {
+    e.preventDefault()
+    if (!practiceId) return
+    setStopSubmitting(true)
+    setStopFormError(null)
+    try {
+      await createStop(practiceId, stopForm)
+      setStopForm(emptyStopForm)
+      setMessage('Durak eklendi')
+    } catch (err) {
+      setStopFormError(err instanceof Error ? err.message : 'Durak kaydedilemedi')
+    } finally {
+      setStopSubmitting(false)
+    }
+  }
+
+  async function onDeleteStop(stop: Stop) {
+    if (!practiceId) return
+    const ok = await confirm({
+      title: 'Durağı sil',
+      message: `“${stop.name}” silinsin mi?`,
+      confirmLabel: 'Sil',
+    })
+    if (!ok) return
+    await deleteStop(practiceId, stop.id)
+  }
+
+  async function onSaveSession(e: FormEvent) {
+    e.preventDefault()
+    if (!practiceId || !sessionPatient) return
+    setSessionBusy(true)
+    setSessionError(null)
+    try {
+      await savePatientSessionMetaFromForm(
+        practiceId,
+        sessionPatient.id,
+        sessionNo,
+        fileNo,
+      )
+      closeSessionPopup()
+      setMessage(`${sessionPatient.name} seans bilgisi kaydedildi`)
+    } catch (err) {
+      setSessionError(err instanceof Error ? err.message : 'Kaydedilemedi')
+    } finally {
+      setSessionBusy(false)
+    }
+  }
+
+  const sessionMax = maxSessionFor(parseFileSelect(fileNo)?.fileHalf ?? null)
 
   return (
     <div className="page">
@@ -277,10 +457,17 @@ export function PatientsPage() {
         </button>
         <button
           type="button"
-          className={`patient-sort-chip ${sortKey === 'sessions' ? 'is-active' : ''}`}
-          onClick={() => selectSort('sessions')}
+          className={`patient-sort-chip ${sortKey === 'weekly' ? 'is-active' : ''}`}
+          onClick={() => selectSort('weekly')}
         >
-          Seans {sortKey === 'sessions' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+          Haftada {sortKey === 'weekly' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+        </button>
+        <button
+          type="button"
+          className={`patient-sort-chip ${sortKey === 'sessionTotal' ? 'is-active' : ''}`}
+          onClick={() => selectSort('sessionTotal')}
+        >
+          Seans {sortKey === 'sessionTotal' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
         </button>
       </div>
 
@@ -293,35 +480,52 @@ export function PatientsPage() {
               : weekCount === 3
                 ? 'is-week-3'
                 : 'is-week-other'
+          const metaParts = [
+            weekCount === 0 ? 'Plansız' : `${weekCount}×`,
+            formatSessionMetaShort({
+              fileNo: p.fileNo,
+              sessionNo: p.sessionNo,
+              fileHalf: p.fileHalf,
+            }),
+          ].filter(Boolean)
+          const sessionMax = maxSessionFor(p.fileHalf ?? null)
+          const progressPct =
+            p.sessionNo != null && p.fileNo != null
+              ? Math.min(100, Math.max(0, (p.sessionNo / sessionMax) * 100))
+              : 0
           return (
-          <li
-            key={p.id}
-            className={`patient-card ${p.active ? '' : 'inactive'} ${editingId === p.id ? 'is-editing' : ''}`}
-          >
-            <button
-              type="button"
-              className="patient-card-main"
-              onClick={() => openEdit(p)}
+            <li
+              key={p.id}
+              className={`patient-card ${p.active ? '' : 'inactive'} ${editingId === p.id ? 'is-editing' : ''}`}
+              style={{ '--session-progress': `${progressPct}%` } as CSSProperties}
             >
-              <span className={`visit-name plan-name ${weekTone}`}>
-                {p.name}
-              </span>
-              <span className="muted small patient-week-count">
-                {weekCount === 0 ? 'Plansız' : `${weekCount}×`}
-              </span>
-              {p.lat == null || p.lng == null ? (
-                <span className="warn small">Konum yok</span>
-              ) : null}
-            </button>
-            <button
-              className="btn danger icon-action"
-              type="button"
-              aria-label="Sil"
-              onClick={() => void onDelete(p)}
-            >
-              <IconTrash />
-            </button>
-          </li>
+              <button
+                type="button"
+                className="patient-card-main"
+                onClick={() => onCardClick(p)}
+                onPointerDown={(e) => onCardPointerDown(e, p)}
+                onPointerMove={onCardPointerMove}
+                onPointerUp={onCardPointerEnd}
+                onPointerCancel={onCardPointerEnd}
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                <span className={`visit-name plan-name ${weekTone}`}>{p.name}</span>
+                <span className="muted small patient-week-count">
+                  {metaParts.join(' · ')}
+                </span>
+                {p.lat == null || p.lng == null ? (
+                  <span className="warn small">Konum yok</span>
+                ) : null}
+              </button>
+              <button
+                className="btn danger icon-action"
+                type="button"
+                aria-label="Sil"
+                onClick={() => void onDelete(p)}
+              >
+                <IconTrash />
+              </button>
+            </li>
           )
         })}
       </ul>
@@ -331,6 +535,189 @@ export function PatientsPage() {
           <p>Henüz hasta yok.</p>
         </section>
       )}
+
+      {sessionPatient ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={closeSessionPopup}
+        >
+          <div
+            className="modal session-meta-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="session-meta-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="modal-header">
+              <h2 id="session-meta-title">{sessionPatient.name}</h2>
+              <button
+                className="btn ghost icon-action"
+                type="button"
+                aria-label="Kapat"
+                onClick={closeSessionPopup}
+              >
+                <IconClose />
+              </button>
+            </header>
+            <form className="stack" onSubmit={(e) => void onSaveSession(e)}>
+              <div className="session-meta-fields">
+                <label>
+                  Kaçıncı Dosyası
+                  <select
+                    value={fileNo}
+                    onChange={(e) => {
+                      const next = e.target.value
+                      setFileNo(next)
+                      const half = parseFileSelect(next)?.fileHalf ?? null
+                      const max = maxSessionFor(half)
+                      if (sessionNo && Number(sessionNo) > max) {
+                        setSessionNo(String(max))
+                      }
+                    }}
+                  >
+                    <option value="">—</option>
+                    {FILE_SELECT_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Kaçıncı Seansı
+                  <select
+                    value={sessionNo}
+                    onChange={(e) => setSessionNo(e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {Array.from({ length: sessionMax + 1 }, (_, i) => i).map((n) => (
+                      <option key={n} value={String(n)}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              {sessionError && (
+                <p className="error" role="alert">
+                  {sessionError}
+                </p>
+              )}
+              <footer className="modal-footer session-meta-footer">
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={closeSessionPopup}
+                  disabled={sessionBusy}
+                >
+                  İptal
+                </button>
+                <button
+                  className="btn primary icon-action"
+                  type="submit"
+                  disabled={sessionBusy}
+                  aria-label="Kaydet"
+                >
+                  <IconCheck />
+                </button>
+              </footer>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      <section className="panel add-patient-panel stops-panel">
+        <button
+          type="button"
+          className="add-patient-toggle"
+          aria-expanded={stopsOpen}
+          onClick={() => setStopsOpen((o) => !o)}
+        >
+          <h2>Durak Ekle</h2>
+          <span className="muted small" aria-hidden>
+            {stopsOpen ? '▲' : '▼'}
+          </span>
+        </button>
+        {stopsOpen ? (
+          <div className="settings-panel-body stack">
+            <form className="stack" onSubmit={(e) => void onSaveStop(e)}>
+              <label>
+                Durak adı
+                <input
+                  value={stopForm.name}
+                  onChange={(e) => setStopForm({ ...stopForm, name: e.target.value })}
+                  placeholder="ör. Eczane"
+                  required
+                  autoComplete="off"
+                />
+              </label>
+              <CoordsField
+                value={stopForm.coords}
+                onChange={(coords) => setStopForm({ ...stopForm, coords })}
+                required
+              />
+              <label>
+                Bekleme (dk)
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={60}
+                  step={1}
+                  value={stopForm.waitMin}
+                  onChange={(e) =>
+                    setStopForm({
+                      ...stopForm,
+                      waitMin: Number(e.target.value) || 1,
+                    })
+                  }
+                  required
+                />
+              </label>
+              {stopFormError && (
+                <p className="error" role="alert">
+                  {stopFormError}
+                </p>
+              )}
+              <button
+                className="btn primary icon-action"
+                type="submit"
+                disabled={stopSubmitting}
+                aria-label="Durak kaydet"
+              >
+                <IconCheck />
+              </button>
+            </form>
+
+            {stops.length === 0 ? (
+              <p className="muted small">Henüz kayıtlı durak yok.</p>
+            ) : (
+              <ul className="stop-library-list">
+                {stops.map((s) => (
+                  <li key={s.id} className="stop-library-item">
+                    <div>
+                      <strong className="pick-name">{s.name}</strong>
+                      <p className="muted small">
+                        {s.waitMin} dk · {s.lat.toFixed(5)}, {s.lng.toFixed(5)}
+                      </p>
+                    </div>
+                    <button
+                      className="btn danger icon-action"
+                      type="button"
+                      aria-label="Sil"
+                      onClick={() => void onDeleteStop(s)}
+                    >
+                      <IconTrash />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : null}
+      </section>
+
       {confirmDialog}
     </div>
   )

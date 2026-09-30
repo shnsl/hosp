@@ -36,6 +36,7 @@ function resolveWeekday(data: Record<string, unknown>): Weekday {
 }
 
 function mapVisit(id: string, data: Record<string, unknown>): Visit {
+  const kind = data.kind === 'stop' ? 'stop' : 'patient'
   return {
     id,
     patientId: String(data.patientId ?? ''),
@@ -45,6 +46,10 @@ function mapVisit(id: string, data: Record<string, unknown>): Visit {
     durationMin: typeof data.durationMin === 'number' ? data.durationMin : 45,
     status: (data.status as VisitStatus) || 'planned',
     statusDate: typeof data.statusDate === 'string' ? data.statusDate : null,
+    kind,
+    stopName: typeof data.stopName === 'string' ? data.stopName : null,
+    stopLat: typeof data.stopLat === 'number' ? data.stopLat : null,
+    stopLng: typeof data.stopLng === 'number' ? data.stopLng : null,
     createdAt: String(data.createdAtIso ?? data.createdAt ?? ''),
     updatedAt: String(data.updatedAtIso ?? data.updatedAt ?? ''),
   }
@@ -133,7 +138,49 @@ export async function createVisit(
     startTime: parsed.startTime,
     durationMin: parsed.durationMin,
     status: parsed.status,
+    kind: 'patient',
     order,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    createdAtIso: now,
+    updatedAtIso: now,
+  })
+  return ref.id
+}
+
+export async function createStopVisit(
+  practiceId: string,
+  input: {
+    weekday: Weekday
+    startTime: string
+    order: number
+    stopName: string
+    stopLat: number
+    stopLng: number
+    durationMin: number
+  },
+): Promise<string> {
+  const name = input.stopName.trim()
+  if (!name) throw new Error('Durak adı gerekli')
+  if (!Number.isFinite(input.stopLat) || !Number.isFinite(input.stopLng)) {
+    throw new Error('Durak konumu gerekli')
+  }
+  const durationMin = Math.round(input.durationMin)
+  if (!Number.isInteger(durationMin) || durationMin < 1 || durationMin > 60) {
+    throw new Error('Bekleme süresi 1–60 dk olmalı')
+  }
+  const now = new Date().toISOString()
+  const ref = await addDoc(collection(db, 'practices', practiceId, 'visits'), {
+    patientId: '',
+    weekday: input.weekday,
+    startTime: input.startTime,
+    durationMin,
+    status: 'planned',
+    kind: 'stop',
+    stopName: name,
+    stopLat: input.stopLat,
+    stopLng: input.stopLng,
+    order: input.order,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     createdAtIso: now,

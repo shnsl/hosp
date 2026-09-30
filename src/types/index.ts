@@ -17,6 +17,18 @@ export interface Practice {
   createdAt: string
 }
 
+/** Kayıtlı rota durağı (hasta değil; günlere eklenebilir) */
+export interface Stop {
+  id: string
+  name: string
+  lat: number
+  lng: number
+  /** Varsayılan bekleme (dk), 1–60 */
+  waitMin: number
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Patient {
   id: string
   name: string
@@ -30,6 +42,12 @@ export interface Patient {
   acceptFrom?: string | null
   /** Tedavi kabul bitişi HH:MM; yoksa kısıt yok */
   acceptTo?: string | null
+  /** Kaçıncı seans (manuel / otomatik) */
+  sessionNo?: number | null
+  /** Kaçıncı dosya (1–3) */
+  fileNo?: number | null
+  /** Bölünmüş dosya yarısı: 1 → x.1, 2 → x.2; yoksa tam 30 */
+  fileHalf?: 1 | 2 | null
   createdAt: string
   updatedAt: string
 }
@@ -51,8 +69,17 @@ export interface Visit {
   status: VisitStatus
   /** Alındı/iptal işaretinin geçerli olduğu takvim günü (YYYY-MM-DD) */
   statusDate?: string | null
+  /** Hasta ziyareti veya rota durağı */
+  kind?: 'patient' | 'stop'
+  stopName?: string | null
+  stopLat?: number | null
+  stopLng?: number | null
   createdAt: string
   updatedAt: string
+}
+
+export function isStopVisit(v: Pick<Visit, 'kind'>): boolean {
+  return v.kind === 'stop'
 }
 
 export interface LatLng {

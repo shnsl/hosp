@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { IconCheck, IconClose } from '../components/Icons'
 import { useConfirm } from '../components/useConfirm'
@@ -6,10 +6,16 @@ import {
   subscribePatients,
   updatePatientAcceptWindow,
 } from '../features/patients/api'
+import { subscribeAllVisits } from '../features/visits/api'
+import { ACCENTS } from '../lib/accents'
 import { useAuth } from '../lib/auth'
-import type { Patient } from '../types'
+import { WEEKDAYS } from '../lib/dates'
+import { useTheme } from '../lib/theme'
+import type { Patient, Visit } from '../types'
 
 type Draft = { acceptFrom: string; acceptTo: string }
+type SectionId = 'list' | 'overview'
+type OverviewSort = 'window' | 'name'
 
 /** Sadece rakam; 0845 → 08:45, yazarken otomatik : */
 function filterTimeInput(raw: string): string {
@@ -29,14 +35,94 @@ function draftsFromPatients(patients: Patient[]): Record<string, Draft> {
   return out
 }
 
+function ExceptionSection({
+  id,
+  title,
+  meta,
+  open,
+  onToggle,
+  children,
+}: {
+  id: SectionId
+  title: string
+  meta?: string
+  open: boolean
+  onToggle: (id: SectionId) => void
+  children: ReactNode
+}) {
+  return (
+    <section className="panel settings-panel exception-section">
+      <button
+        type="button"
+        className="panel-toggle"
+        aria-expanded={open}
+        onClick={() => onToggle(id)}
+      >
+        <h2>
+          {title}
+          {meta ? <span className="muted small exception-section-meta"> · {meta}</span> : null}
+        </h2>
+        <span className="muted small" aria-hidden>
+          {open ? '▲' : '▼'}
+        </span>
+      </button>
+      {open ? <div className="settings-panel-body">{children}</div> : null}
+    </section>
+  )
+}
+
+function parseTimeMin(hhmm: string): number | null {
+  const m = hhmm.trim().match(/^(\d{1,2}):(\d{2})$/)
+  if (!m) return null
+  const h = Number(m[1])
+  const min = Number(m[2])
+  if (h > 23 || min > 59) return null
+  return h * 60 + min
+}
+
+const TRACK_START_MIN = 8 * 60 // 08:00
+const TRACK_END_MIN = 16 * 60 // 16:00
+const TRACK_SPAN_MIN = TRACK_END_MIN - TRACK_START_MIN // 8 saat
+
+/** 08:00–16:00 aralığında gün yüzdesi (0–100) */
+function timeToTrackPct(hhmm: string): number | null {
+  const min = parseTimeMin(hhmm)
+  if (min == null) return null
+  const clamped = Math.min(TRACK_END_MIN, Math.max(TRACK_START_MIN, min))
+  return ((clamped - TRACK_START_MIN) / TRACK_SPAN_MIN) * 100
+}
+
+function roundBucket(min: number, step = 30): number {
+  return Math.round(min / step) * step
+}
+
+/** Aynı / yakın aralıklar aynı anahtarı alır (30 dk bucket) */
+function windowGroupKey(from: string, to: string): string {
+  const f = parseTimeMin(from)
+  const t = parseTimeMin(to)
+  const fb = f == null ? -1 : roundBucket(f)
+  const tb = t == null ? 24 * 60 : roundBucket(t)
+  return `${fb}-${tb}`
+}
+
+function windowSortValue(from: string, to: string): number {
+  const f = parseTimeMin(from) ?? -1
+  const t = parseTimeMin(to) ?? 24 * 60
+  return f * 10_000 + t
+}
+
 export function ExceptionsPage() {
   const { practiceId } = useAuth()
+  const { theme } = useTheme()
   const { confirm, dialog: confirmDialog } = useConfirm()
   const [patients, setPatients] = useState<Patient[]>([])
+  const [visits, setVisits] = useState<Visit[]>([])
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [openSection, setOpenSection] = useState<SectionId | null>(null)
+  const [overviewSort, setOverviewSort] = useState<OverviewSort>('window')
 
   useEffect(() => {
     if (!practiceId) return
@@ -50,6 +136,81 @@ export function ExceptionsPage() {
       (e) => setError(e.message),
     )
   }, [practiceId])
+
+  useEffect(() => {
+    if (!practiceId) return
+    return subscribeAllVisits(practiceId, setVisits, (e) => setError(e.message))
+  }, [practiceId])
+
+  const daysByPatient = useMemo(() => {
+    const map = new Map<string, string>()
+    const days = new Map<string, Set<number>>()
+    for (const v of visits) {
+      let set = days.get(v.patientId)
+      if (!set) {
+        set = new Set()
+        days.set(v.patientId, set)
+      }
+      set.add(v.weekday)
+    }
+    for (const [patientId, set] of days) {
+      const labels = WEEKDAYS.filter((d) => set.has(d.value)).map((d) => d.short)
+      if (labels.length > 0) map.set(patientId, labels.join(','))
+    }
+    return map
+  }, [visits])
+
+  const ruled = useMemo(() => {
+    const rows = patients
+      .map((p) => {
+        const d = drafts[p.id] ?? { acceptFrom: '', acceptTo: '' }
+        const from = d.acceptFrom.trim()
+        const to = d.acceptTo.trim()
+        if (!from && !to) return null
+        return {
+          id: p.id,
+          name: p.name,
+          daysLabel: daysByPatient.get(p.id) ?? '',
+          from,
+          to,
+          fromPct: from ? timeToTrackPct(from) : 0,
+          toPct: to ? timeToTrackPct(to) : 100,
+          groupKey: windowGroupKey(from, to),
+          sortValue: windowSortValue(from, to),
+        }
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null)
+
+    const groupOrder: string[] = []
+    for (const r of [...rows].sort((a, b) => a.sortValue - b.sortValue)) {
+      if (!groupOrder.includes(r.groupKey)) groupOrder.push(r.groupKey)
+    }
+    const colorByGroup = new Map<string, string>()
+    for (let i = 0; i < groupOrder.length; i++) {
+      const accent = ACCENTS[i % ACCENTS.length]
+      colorByGroup.set(groupOrder[i], accent.themeColor[theme])
+    }
+
+    const withColor = rows.map((r) => ({
+      ...r,
+      color: colorByGroup.get(r.groupKey) ?? ACCENTS[0].themeColor[theme],
+    }))
+
+    if (overviewSort === 'name') {
+      return [...withColor].sort((a, b) =>
+        a.name.localeCompare(b.name, 'tr', { sensitivity: 'base' }),
+      )
+    }
+    return [...withColor].sort(
+      (a, b) =>
+        a.sortValue - b.sortValue ||
+        a.name.localeCompare(b.name, 'tr', { sensitivity: 'base' }),
+    )
+  }, [patients, drafts, overviewSort, theme, daysByPatient])
+
+  function toggleSection(id: SectionId) {
+    setOpenSection((prev) => (prev === id ? null : id))
+  }
 
   function setDraft(id: string, patch: Partial<Draft>) {
     setDrafts((prev) => ({
@@ -107,14 +268,8 @@ export function ExceptionsPage() {
         <div>
           <p className="eyebrow">Kurallar</p>
           <h1>İstisnalar</h1>
-          <p className="muted">Hastanın Tedavi Kabul Ettiği Saat Aralığı</p>
         </div>
       </header>
-
-      <p className="muted small">
-        Boş bırakılan hastalar her saatte kabul eder. Kısıtlar yalnızca hafta içi (Pzt–Cum)
-        geçerlidir; Cumartesi uygulanmaz.
-      </p>
 
       {error && (
         <p className="error" role="alert">
@@ -130,78 +285,163 @@ export function ExceptionsPage() {
           </p>
         </section>
       ) : (
-        <ul className="exception-list">
-          {patients.map((p) => {
-            const d = drafts[p.id] ?? { acceptFrom: '', acceptTo: '' }
-            const hasRule = Boolean(d.acceptFrom || d.acceptTo)
-            return (
-              <li key={p.id} className="panel exception-card">
-                <div className="exception-card-head">
-                  <strong className="pick-name">{p.name}</strong>
-                  {hasRule ? (
-                    <span className="muted small">
-                      {d.acceptFrom || '…'} – {d.acceptTo || '…'}
-                    </span>
-                  ) : (
-                    <span className="muted small">Kısıt yok</span>
-                  )}
-                </div>
-                <div className="exception-times">
-                  <label>
-                    Başlangıç (24s)
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="off"
-                      placeholder="0845"
-                      maxLength={5}
-                      lang="tr"
-                      value={d.acceptFrom}
-                      onChange={(e) =>
-                        setDraft(p.id, { acceptFrom: filterTimeInput(e.target.value) })
-                      }
-                    />
-                  </label>
-                  <label>
-                    Bitiş (24s)
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="off"
-                      placeholder="1200"
-                      maxLength={5}
-                      lang="tr"
-                      value={d.acceptTo}
-                      onChange={(e) =>
-                        setDraft(p.id, { acceptTo: filterTimeInput(e.target.value) })
-                      }
-                    />
-                  </label>
-                </div>
-                <div className="row-actions">
+        <div className="exception-sections">
+          <ExceptionSection
+            id="list"
+            title="Liste"
+            meta={`${patients.length} hasta`}
+            open={openSection === 'list'}
+            onToggle={toggleSection}
+          >
+            <ul className="exception-list">
+              {patients.map((p) => {
+                const d = drafts[p.id] ?? { acceptFrom: '', acceptTo: '' }
+                const hasRule = Boolean(d.acceptFrom || d.acceptTo)
+                return (
+                  <li key={p.id} className="exception-card">
+                    <strong className="pick-name exception-card-name">{p.name}</strong>
+                    <div className="exception-card-row">
+                      <div className="exception-times">
+                        <label>
+                          Başlangıç
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            autoComplete="off"
+                            placeholder="0845"
+                            maxLength={5}
+                            lang="tr"
+                            value={d.acceptFrom}
+                            onChange={(e) =>
+                              setDraft(p.id, {
+                                acceptFrom: filterTimeInput(e.target.value),
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Bitiş
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            autoComplete="off"
+                            placeholder="1200"
+                            maxLength={5}
+                            lang="tr"
+                            value={d.acceptTo}
+                            onChange={(e) =>
+                              setDraft(p.id, {
+                                acceptTo: filterTimeInput(e.target.value),
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                      <div className="row-actions exception-card-actions">
+                        <button
+                          className="btn primary icon-action"
+                          type="button"
+                          aria-label="Kaydet"
+                          disabled={busyId === p.id}
+                          onClick={() => void savePatient(p)}
+                        >
+                          <IconCheck />
+                        </button>
+                        <button
+                          className="btn icon-action"
+                          type="button"
+                          aria-label="Kısıtı kaldır"
+                          disabled={busyId === p.id || !hasRule}
+                          onClick={() => void clearPatient(p)}
+                        >
+                          <IconClose />
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          </ExceptionSection>
+
+          <ExceptionSection
+            id="overview"
+            title="Özet"
+            meta={
+              ruled.length > 0
+                ? `${ruled.length} kısıt`
+                : 'kısıt yok'
+            }
+            open={openSection === 'overview'}
+            onToggle={toggleSection}
+          >
+            {ruled.length === 0 ? (
+              <p className="muted small">Henüz saat kısıtı yok.</p>
+            ) : (
+              <>
+                <div
+                  className="exception-sort"
+                  role="group"
+                  aria-label="Özet sıralama"
+                >
                   <button
-                    className="btn primary icon-action"
                     type="button"
-                    aria-label="Kaydet"
-                    disabled={busyId === p.id}
-                    onClick={() => void savePatient(p)}
+                    className={`exception-sort-btn${overviewSort === 'window' ? ' is-active' : ''}`}
+                    aria-pressed={overviewSort === 'window'}
+                    onClick={() => setOverviewSort('window')}
                   >
-                    <IconCheck />
+                    Saate göre
                   </button>
                   <button
-                    className="btn icon-action"
                     type="button"
-                    aria-label="Kısıtı kaldır"
-                    disabled={busyId === p.id || !hasRule}
-                    onClick={() => void clearPatient(p)}
+                    className={`exception-sort-btn${overviewSort === 'name' ? ' is-active' : ''}`}
+                    aria-pressed={overviewSort === 'name'}
+                    onClick={() => setOverviewSort('name')}
                   >
-                    <IconClose />
+                    İsme göre
                   </button>
                 </div>
-              </li>
-            )
-          })}
-        </ul>
+                <ul className="exception-overview">
+                  {ruled.map((r) => {
+                    const left = Math.min(r.fromPct ?? 0, r.toPct ?? 100)
+                    const right = Math.max(r.fromPct ?? 0, r.toPct ?? 100)
+                    const width = Math.max(2, right - left)
+                    return (
+                      <li key={r.id} className="exception-overview-item">
+                        <div className="exception-overview-head">
+                          <strong>
+                            {r.name}
+                            {r.daysLabel ? (
+                              <span className="muted exception-overview-days">
+                                {' '}
+                                ({r.daysLabel})
+                              </span>
+                            ) : null}
+                          </strong>
+                          <span className="muted small">
+                            {r.from || '…'} – {r.to || '…'}
+                          </span>
+                        </div>
+                        <div className="exception-overview-track" aria-hidden>
+                          <span
+                            className="exception-overview-bar"
+                            style={
+                              {
+                                left: `${left}%`,
+                                width: `${width}%`,
+                                '--bar-color': r.color,
+                              } as CSSProperties
+                            }
+                          />
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </>
+            )}
+          </ExceptionSection>
+        </div>
       )}
       {confirmDialog}
     </div>

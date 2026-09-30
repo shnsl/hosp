@@ -978,17 +978,41 @@ html[data-theme='dark'] .weekday-chip.is-active {
   font-size: 0.98rem;
 }
 
+.exception-sections {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.exception-section-meta {
+  font-weight: 500;
+}
+
 .exception-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.75rem;
+  gap: 0.45rem;
 }
 
 .exception-card {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.35rem;
+  padding: 0.55rem 0.7rem;
+  background: color-mix(in srgb, var(--ink) 3%, var(--surface));
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.exception-card-name {
+  font-size: 0.92rem;
+  line-height: 1.2;
+}
+
+.exception-card-row {
+  display: flex;
+  align-items: end;
+  gap: 0.45rem;
 }
 
 .exception-card-head {
@@ -1002,15 +1026,105 @@ html[data-theme='dark'] .weekday-chip.is-active {
 .exception-times {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.65rem;
+  gap: 0.4rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .exception-times label {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.85rem;
+  gap: 0.15rem;
+  font-size: 0.72rem;
   color: var(--muted);
+}
+
+.exception-times input {
+  padding: 0.4rem 0.5rem;
+  font-size: 0.9rem;
+}
+
+.exception-card-actions {
+  flex-shrink: 0;
+  gap: 0.3rem;
+}
+
+.exception-card-actions .icon-action {
+  width: 2.2rem;
+  height: 2.2rem;
+}
+
+.exception-sort {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.exception-sort-btn {
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.exception-sort-btn.is-active {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 14%, var(--surface));
+  color: var(--brand-strong);
+}
+
+.exception-overview {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.exception-overview-item {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.exception-overview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 0.65rem;
+}
+
+.exception-overview-head strong {
+  font-size: 0.9rem;
+}
+
+.exception-overview-days {
+  font-weight: 500;
+  font-size: 0.82em;
+}
+
+.exception-overview-track {
+  position: relative;
+  height: 0.65rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.exception-overview-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: inherit;
+  background: var(--bar-color, var(--brand));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bar-color, var(--brand)) 35%, transparent);
 }
 
 .search-field {
@@ -1273,6 +1387,9 @@ html[data-theme='dark'] .patient-sort-chip.is-active {
 }
 
 .patient-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1280,6 +1397,23 @@ html[data-theme='dark'] .patient-sort-chip.is-active {
   box-shadow: none;
   gap: 0.25rem;
   min-width: 0;
+  --session-progress: 0%;
+}
+
+.patient-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--session-progress);
+  background: color-mix(in srgb, var(--brand) 22%, transparent);
+  pointer-events: none;
+  z-index: 0;
+  transition: width 0.25s ease;
+}
+
+.patient-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .patient-card .plan-name {
@@ -1398,6 +1532,45 @@ html[data-theme='dark'] .patient-sort-chip.is-active {
   color: #fff;
   background: var(--danger);
   border-color: var(--danger);
+}
+
+.plan-order.is-stop-order {
+  background: color-mix(in srgb, var(--brand) 10%, var(--surface));
+  color: var(--muted);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.plan-name.is-stop-name {
+  color: var(--brand-strong);
+  font-weight: 700;
+}
+
+.stop-modal {
+  width: min(100%, 24rem);
+}
+
+.stop-library-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.stop-library-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 3%, var(--surface));
+}
+
+.stops-panel .settings-panel-body {
+  margin-top: 0.75rem;
 }
 
 .plan-item.is-done {
@@ -1797,6 +1970,35 @@ html.sort-scroll-lock body {
   white-space: pre-line;
   color: var(--ink);
   line-height: 1.45;
+}
+
+.session-meta-modal {
+  width: min(100%, 22rem);
+}
+
+.session-meta-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+.session-meta-fields label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.session-meta-fields input,
+.session-meta-fields select {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: center;
+}
+
+.session-meta-footer {
+  margin-top: 0.25rem;
 }
 
 .coords-preview {
