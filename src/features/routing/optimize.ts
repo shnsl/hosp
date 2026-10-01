@@ -22,6 +22,38 @@ export function timeToMinutes(hhmm: string): number {
   return h * 60 + m
 }
 
+/** Geçersiz / boş saat → null */
+export function parseTimeToMinutes(hhmm: string | null | undefined): number | null {
+  if (!hhmm?.trim()) return null
+  const [h, m] = hhmm.trim().split(':').map(Number)
+  if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+    return null
+  }
+  return h * 60 + m
+}
+
+/**
+ * Günlük plandaki başlangıç saati tedavi kabul (istisna) penceresinde mi?
+ * from/to yoksa kısıt yok → uygun. Cumartesi kısıt uygulanmaz.
+ * Rota yuvarlaması için birkaç dk erken tolerans tanınır.
+ */
+export function visitFitsAcceptWindow(
+  patient: {
+    acceptFrom?: string | null
+    acceptTo?: string | null
+  },
+  startTime: string,
+  weekday?: Weekday,
+): boolean {
+  const w = patientToAcceptWindow(patient, weekday)
+  const t = parseTimeToMinutes(startTime)
+  if (t == null) return true
+  const graceMin = 15
+  if (w.fromMin != null && t < w.fromMin - graceMin) return false
+  if (w.toMin != null && t > w.toMin + graceMin) return false
+  return true
+}
+
 /**
  * Sırayı simüle eder: erken varışta acceptFrom’a kadar bekler.
  * Kabul penceresi dışı başlangıç → büyük ceza.
@@ -300,7 +332,7 @@ export function patientToAcceptWindow(
     return { fromMin: null, toMin: null }
   }
   return {
-    fromMin: patient.acceptFrom ? timeToMinutes(patient.acceptFrom) : null,
-    toMin: patient.acceptTo ? timeToMinutes(patient.acceptTo) : null,
+    fromMin: parseTimeToMinutes(patient.acceptFrom),
+    toMin: parseTimeToMinutes(patient.acceptTo),
   }
 }

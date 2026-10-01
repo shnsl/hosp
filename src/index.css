@@ -1376,6 +1376,45 @@ html[data-theme='dark'] .patient-sort-chip.is-active {
   margin: 0.55rem 0 0;
   padding-top: 0.55rem;
   border-top: 1px dashed var(--line);
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.leg-hint.accept-only {
+  border-top: none;
+  padding-top: 0.35rem;
+}
+
+.accept-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 25%, transparent);
+}
+
+.accept-dot.is-ok {
+  background: #16a34a;
+  color: #16a34a;
+  box-shadow: 0 0 6px color-mix(in srgb, #16a34a 55%, transparent);
+}
+
+.accept-dot.is-warn {
+  background: #ca8a04;
+  color: #ca8a04;
+  box-shadow: 0 0 6px color-mix(in srgb, #ca8a04 55%, transparent);
+}
+
+html[data-theme='dark'] .accept-dot.is-ok {
+  background: #4ade80;
+  color: #4ade80;
+}
+
+html[data-theme='dark'] .accept-dot.is-warn {
+  background: #facc15;
+  color: #facc15;
 }
 
 .patient-card,
@@ -1398,6 +1437,41 @@ html[data-theme='dark'] .patient-sort-chip.is-active {
   gap: 0.25rem;
   min-width: 0;
   --session-progress: 0%;
+  /* Dosya paleti: isim renklerinden (cyan/pembe/amber) ayrı */
+  --file-tone: #6366f1;
+  --session-progress-fill: color-mix(in srgb, var(--file-tone) 22%, transparent);
+  --session-meta-color: var(--file-tone);
+}
+
+.patient-card[data-file='1'] {
+  --file-tone: #6366f1; /* indigo */
+}
+
+.patient-card[data-file='2'] {
+  --file-tone: #059669; /* emerald */
+}
+
+.patient-card[data-file='3'] {
+  --file-tone: #7c3aed; /* violet */
+}
+
+html[data-theme='dark'] .patient-card[data-file='1'] {
+  --file-tone: #a5b4fc;
+}
+
+html[data-theme='dark'] .patient-card[data-file='2'] {
+  --file-tone: #6ee7b7;
+}
+
+html[data-theme='dark'] .patient-card[data-file='3'] {
+  --file-tone: #c4b5fd;
+}
+
+.patient-card[data-file='1'],
+.patient-card[data-file='2'],
+.patient-card[data-file='3'] {
+  --session-progress-fill: color-mix(in srgb, var(--file-tone) 24%, transparent);
+  --session-meta-color: var(--file-tone);
 }
 
 .patient-card::before {
@@ -1405,10 +1479,10 @@ html[data-theme='dark'] .patient-sort-chip.is-active {
   position: absolute;
   inset: 0 auto 0 0;
   width: var(--session-progress);
-  background: color-mix(in srgb, var(--brand) 22%, transparent);
+  background: var(--session-progress-fill);
   pointer-events: none;
   z-index: 0;
-  transition: width 0.25s ease;
+  transition: width 0.25s ease, background 0.25s ease;
 }
 
 .patient-card > * {
@@ -1421,7 +1495,13 @@ html[data-theme='dark'] .patient-sort-chip.is-active {
   line-height: 1.2;
 }
 
-.patient-card .patient-week-count,
+.patient-card .patient-week-count {
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--session-meta-color);
+}
+
 .patient-card .warn.small {
   font-size: 0.72rem;
   line-height: 1.2;
@@ -1567,6 +1647,11 @@ html[data-theme='dark'] .patient-sort-chip.is-active {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: color-mix(in srgb, var(--ink) 3%, var(--surface));
+}
+
+.stop-library-item.is-editing {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
 }
 
 .stops-panel .settings-panel-body {

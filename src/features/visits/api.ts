@@ -195,7 +195,16 @@ export async function updateVisit(
   patch: Partial<
     Pick<
       Visit,
-      'startTime' | 'durationMin' | 'status' | 'statusDate' | 'order' | 'patientId' | 'weekday'
+      | 'startTime'
+      | 'durationMin'
+      | 'status'
+      | 'statusDate'
+      | 'order'
+      | 'patientId'
+      | 'weekday'
+      | 'stopName'
+      | 'stopLat'
+      | 'stopLng'
     >
   >,
 ): Promise<void> {
@@ -221,6 +230,35 @@ export async function deleteVisitsForPatient(
   const q = query(
     collection(db, 'practices', practiceId, 'visits'),
     where('patientId', '==', patientId),
+  )
+  const snap = await getDocs(q)
+  if (snap.empty) return 0
+
+  let deleted = 0
+  let batch = writeBatch(db)
+  let ops = 0
+  for (const d of snap.docs) {
+    batch.delete(d.ref)
+    deleted += 1
+    ops += 1
+    if (ops >= 400) {
+      await batch.commit()
+      batch = writeBatch(db)
+      ops = 0
+    }
+  }
+  if (ops > 0) await batch.commit()
+  return deleted
+}
+
+/** Belirli hafta gününün tüm ziyaretlerini sil (günlük listeyi temizle) */
+export async function deleteVisitsForWeekday(
+  practiceId: string,
+  weekday: Weekday,
+): Promise<number> {
+  const q = query(
+    collection(db, 'practices', practiceId, 'visits'),
+    where('weekday', '==', weekday),
   )
   const snap = await getDocs(q)
   if (snap.empty) return 0

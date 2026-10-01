@@ -142,6 +142,20 @@ export function IconTrash({ className }: { className?: string }) {
   )
 }
 
+export function IconEdit({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="1em" height="1em" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 20h4l11-11a2.1 2.1 0 0 0 0-3l-1-1a2.1 2.1 0 0 0-3 0L4 16v4z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path d="M13 6l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function IconClose({ className }: { className?: string }) {
   return (
     <svg className={className} width="1em" height="1em" viewBox="0 0 24 24" fill="none" aria-hidden>

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CoordsField } from '../components/CoordsField'
-import { IconCheck, IconClose, IconFinishDay, IconMap, IconPlus, IconRefresh, IconRoute, IconTrash } from '../components/Icons'
+import { IconCheck, IconClose, IconEdit, IconFinishDay, IconMap, IconPlus, IconRefresh, IconRoute, IconTrash } from '../components/Icons'
 import { SortableList } from '../components/SortableList'
 import { useConfirm } from '../components/useConfirm'
 import {
@@ -17,8 +17,13 @@ import {
 } from '../features/agenda/daySettings'
 import { advancePatientSessionOnDone, subscribePatients } from '../features/patients/api'
 import { subscribeStops } from '../features/stops/api'
-import { suggestRoute, patientToAcceptWindow, timeToMinutes } from '../features/routing/optimize'
-import { tryParseLatLng } from '../features/routing/coords'
+import {
+  suggestRoute,
+  patientToAcceptWindow,
+  timeToMinutes,
+  visitFitsAcceptWindow,
+} from '../features/routing/optimize'
+import { tryParseLatLng, formatLatLng } from '../features/routing/coords'
 import {
   clearAllAttendance,
   clearAttendance,
@@ -29,6 +34,7 @@ import {
   createStopVisit,
   createVisit,
   deleteVisit,
+  deleteVisitsForWeekday,
   migrateVisitsToWeekday,
   subscribeAllVisits,
   updateVisit,
@@ -48,6 +54,8 @@ import {
 import { isStopVisit, type LatLng, type Patient, type Stop, type Visit, type VisitStatus } from '../types'
 
 const MIGRATE_KEY = 'hosp-visits-weekday-migrated'
+const DAY_CLEAR_HOLD_MS = 1000
+const HOLD_MOVE_CANCEL_PX = 12
 
 function initialWeekday(param: string | null): Weekday {
   const n = Number(param)
@@ -81,6 +89,7 @@ export function DailyPlanPage() {
   const [patientAfter, setPatientAfter] = useState('0')
   const [patientInsertError, setPatientInsertError] = useState<string | null>(null)
   const [stopModalOpen, setStopModalOpen] = useState(false)
+  const [editingStopVisit, setEditingStopVisit] = useState<Visit | null>(null)
   const [stopName, setStopName] = useState('')
   const [stopCoords, setStopCoords] = useState('')
   const [stopWaitMin, setStopWaitMin] = useState('10')
@@ -89,6 +98,9 @@ export function DailyPlanPage() {
   const [stopError, setStopError] = useState<string | null>(null)
   const [finishingDay, setFinishingDay] = useState(false)
   const [daySettings, setDaySettings] = useState(defaultDayScheduleSettings)
+  const holdTimerRef = useRef<number | null>(null)
+  const holdStartRef = useRef<{ x: number; y: number } | null>(null)
+  const longPressOpenedRef = useRef(false)
 
   useEffect(() => {
     const fromUrl = initialWeekday(searchParams.get('day'))
@@ -98,6 +110,77 @@ export function DailyPlanPage() {
   function selectWeekday(next: Weekday) {
     setWeekday(next)
     setSearchParams(next === todayWeekday() ? {} : { day: String(next) }, { replace: true })
+  }
+
+  function clearHoldTimer() {
+    if (holdTimerRef.current != null) {
+      window.clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = null
+    }
+  }
+
+  function onDayPointerDown(e: ReactPointerEvent<HTMLButtonElement>, day: Weekday) {
+    if (e.button !== 0) return
+    longPressOpenedRef.current = false
+    holdStartRef.current = { x: e.clientX, y: e.clientY }
+    clearHoldTimer()
+    holdTimerRef.current = window.setTimeout(() => {
+      holdTimerRef.current = null
+      longPressOpenedRef.current = true
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(20)
+      }
+      void clearDayList(day)
+    }, DAY_CLEAR_HOLD_MS)
+  }
+
+  function onDayPointerMove(e: ReactPointerEvent<HTMLButtonElement>) {
+    const start = holdStartRef.current
+    if (!start || holdTimerRef.current == null) return
+    const dx = e.clientX - start.x
+    const dy = e.clientY - start.y
+    if (dx * dx + dy * dy > HOLD_MOVE_CANCEL_PX * HOLD_MOVE_CANCEL_PX) {
+      clearHoldTimer()
+    }
+  }
+
+  function onDayPointerEnd() {
+    clearHoldTimer()
+    holdStartRef.current = null
+  }
+
+  function onDayClick(day: Weekday) {
+    if (longPressOpenedRef.current) {
+      longPressOpenedRef.current = false
+      return
+    }
+    selectWeekday(day)
+  }
+
+  async function clearDayList(day: Weekday) {
+    if (!practiceId) return
+    const dayVisits = allVisits.filter((v) => v.weekday === day)
+    if (dayVisits.length === 0) {
+      setNotice(`${weekdayLabel(day)} listesi zaten boş`)
+      selectWeekday(day)
+      return
+    }
+    const ok = await confirm({
+      title: 'Listeyi temizle',
+      message: `${weekdayLabel(day)} listesi temizlensin mi?\n${dayVisits.length} kayıt silinecek.`,
+      confirmLabel: 'Evet',
+    })
+    if (!ok) return
+    setError(null)
+    setNotice(null)
+    try {
+      await deleteVisitsForWeekday(practiceId, day)
+      setLegs([])
+      selectWeekday(day)
+      setNotice(`${weekdayLabel(day)} listesi temizlendi`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Liste temizlenemedi')
+    }
   }
 
   useEffect(() => {
@@ -205,6 +288,21 @@ export function DailyPlanPage() {
     () => sorted.filter((v) => !isStopVisit(v)).length,
     [sorted],
   )
+
+  /** Sıra no → hasta adı (duraklar atlanır); select etiketleri için */
+  const patientInsertOptions = useMemo(() => {
+    const rows: Array<{ n: number; name: string }> = []
+    let n = 0
+    for (const v of sorted) {
+      if (isStopVisit(v)) continue
+      n += 1
+      rows.push({
+        n,
+        name: patientMap.get(v.patientId)?.name ?? `Hasta ${n}`,
+      })
+    }
+    return rows
+  }, [sorted, patientMap])
 
   const plannedPatientIds = useMemo(
     () =>
@@ -372,6 +470,7 @@ export function DailyPlanPage() {
   }
 
   function openStopModal() {
+    setEditingStopVisit(null)
     setStopName('')
     setStopCoords('')
     setStopWaitMin('10')
@@ -380,8 +479,31 @@ export function DailyPlanPage() {
     setStopModalOpen(true)
   }
 
+  function openEditStop(visit: Visit) {
+    if (!isStopVisit(visit)) return
+    const idx = sorted.findIndex((v) => v.id === visit.id)
+    let afterNum = 0
+    if (idx > 0) {
+      for (let i = 0; i < idx; i++) {
+        if (!isStopVisit(sorted[i])) afterNum += 1
+      }
+    }
+    setEditingStopVisit(visit)
+    setStopName(visit.stopName ?? '')
+    setStopCoords(
+      visit.stopLat != null && visit.stopLng != null
+        ? formatLatLng(visit.stopLat, visit.stopLng)
+        : '',
+    )
+    setStopWaitMin(String(visit.durationMin || 10))
+    setStopAfterPatient(String(afterNum))
+    setStopError(null)
+    setStopModalOpen(true)
+  }
+
   function closeStopModal() {
     setStopModalOpen(false)
+    setEditingStopVisit(null)
     setStopError(null)
     setStopBusy(false)
   }
@@ -478,6 +600,32 @@ export function DailyPlanPage() {
       if (!Number.isInteger(afterNum) || afterNum < 0 || afterNum > patientSlotCount) {
         throw new Error('Eklenme sırası geçersiz')
       }
+
+      if (editingStopVisit) {
+        const without = sorted.filter((v) => v.id !== editingStopVisit.id)
+        const insertAt = insertIndexAfterPatient(afterNum, without)
+        await updateVisit(practiceId, editingStopVisit.id, {
+          stopName: name,
+          stopLat: parsed.lat,
+          stopLng: parsed.lng,
+          durationMin: wait,
+          order: insertAt,
+        })
+        const updated: Visit = {
+          ...editingStopVisit,
+          stopName: name,
+          stopLat: parsed.lat,
+          stopLng: parsed.lng,
+          durationMin: wait,
+          order: insertAt,
+        }
+        const next = [...without]
+        next.splice(insertAt, 0, updated)
+        closeStopModal()
+        await reschedule(next)
+        return
+      }
+
       const insertAt = insertIndexAfterPatient(afterNum, sorted)
       const newId = await createStopVisit(practiceId, {
         weekday,
@@ -508,7 +656,13 @@ export function DailyPlanPage() {
       closeStopModal()
       await reschedule(next)
     } catch (err) {
-      setStopError(err instanceof Error ? err.message : 'Durak eklenemedi')
+      setStopError(
+        err instanceof Error
+          ? err.message
+          : editingStopVisit
+            ? 'Durak güncellenemedi'
+            : 'Durak eklenemedi',
+      )
     } finally {
       setStopBusy(false)
     }
@@ -731,7 +885,13 @@ export function DailyPlanPage() {
             role="tab"
             aria-selected={weekday === d.value}
             className={`weekday-chip ${weekday === d.value ? 'is-active' : ''}`}
-            onClick={() => selectWeekday(d.value)}
+            title={`${d.long} — basılı tutarak listeyi temizle`}
+            onClick={() => onDayClick(d.value)}
+            onPointerDown={(e) => onDayPointerDown(e, d.value)}
+            onPointerMove={onDayPointerMove}
+            onPointerUp={onDayPointerEnd}
+            onPointerCancel={onDayPointerEnd}
+            onContextMenu={(e) => e.preventDefault()}
           >
             {d.short}
           </button>
@@ -864,6 +1024,10 @@ export function DailyPlanPage() {
                 : sorted
                     .slice(0, index + 1)
                     .filter((v) => !isStopVisit(v)).length
+              const acceptOk =
+                !stop && patient
+                  ? visitFitsAcceptWindow(patient, visit.startTime, weekday)
+                  : null
               return (
                 <div
                   className={`plan-item ${stop ? 'is-stop' : ''} ${!stop && att === 'done' ? 'is-done' : ''} ${!stop && att === 'cancelled' ? 'is-cancelled' : ''}`}
@@ -924,7 +1088,18 @@ export function DailyPlanPage() {
                             <IconClose />
                           </button>
                         </>
-                      ) : null}
+                      ) : (
+                        <button
+                          className="btn icon-action"
+                          type="button"
+                          aria-label="Durağı düzenle"
+                          title="Düzenle"
+                          data-no-drag
+                          onClick={() => openEditStop(visit)}
+                        >
+                          <IconEdit />
+                        </button>
+                      )}
                       <button
                         className="btn danger icon-action"
                         type="button"
@@ -939,8 +1114,40 @@ export function DailyPlanPage() {
                   {leg && (
                     <p className="leg-hint muted small">
                       Sonraki: {leg.distanceKm} km · {leg.durationMin} dk
+                      {acceptOk != null ? (
+                        <span
+                          className={`accept-dot ${acceptOk ? 'is-ok' : 'is-warn'}`}
+                          title={
+                            acceptOk
+                              ? 'İstisna saatine uyuyor'
+                              : 'İstisna saatine uymuyor'
+                          }
+                          aria-label={
+                            acceptOk
+                              ? 'İstisna saatine uyuyor'
+                              : 'İstisna saatine uymuyor'
+                          }
+                        />
+                      ) : null}
                     </p>
                   )}
+                  {!leg && acceptOk != null && att !== 'cancelled' ? (
+                    <p className="leg-hint muted small accept-only">
+                      <span
+                        className={`accept-dot ${acceptOk ? 'is-ok' : 'is-warn'}`}
+                        title={
+                          acceptOk
+                            ? 'İstisna saatine uyuyor'
+                            : 'İstisna saatine uymuyor'
+                        }
+                        aria-label={
+                          acceptOk
+                            ? 'İstisna saatine uyuyor'
+                            : 'İstisna saatine uymuyor'
+                        }
+                      />
+                    </p>
+                  ) : null}
                 </div>
               )
             }}
@@ -1149,19 +1356,17 @@ export function DailyPlanPage() {
                 />
               </label>
               <label>
-                Kaçıncı hastadan sonra
+                Hangi hastadan sonra
                 <select
                   value={libraryAfterPatient}
                   onChange={(e) => setLibraryAfterPatient(e.target.value)}
                 >
                   <option value="0">Listenin başına</option>
-                  {Array.from({ length: patientSlotCount }, (_, i) => i + 1).map(
-                    (n) => (
-                      <option key={n} value={String(n)}>
-                        {n}. hastadan sonra
-                      </option>
-                    ),
-                  )}
+                  {patientInsertOptions.map(({ n, name }) => (
+                    <option key={n} value={String(n)}>
+                      {name}’dan sonra
+                    </option>
+                  ))}
                 </select>
               </label>
               {libraryWaitError && (
@@ -1224,19 +1429,17 @@ export function DailyPlanPage() {
               }}
             >
               <label>
-                Kaçıncı hastadan sonra
+                Hangi hastadan sonra
                 <select
                   value={patientAfter}
                   onChange={(e) => setPatientAfter(e.target.value)}
                 >
                   <option value="0">Listenin başına</option>
-                  {Array.from({ length: patientSlotCount }, (_, i) => i + 1).map(
-                    (n) => (
-                      <option key={n} value={String(n)}>
-                        {n}. hastadan sonra
-                      </option>
-                    ),
-                  )}
+                  {patientInsertOptions.map(({ n, name }) => (
+                    <option key={n} value={String(n)}>
+                      {name}’dan sonra
+                    </option>
+                  ))}
                 </select>
               </label>
               {patientInsertError && (
@@ -1281,7 +1484,9 @@ export function DailyPlanPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <header className="modal-header">
-              <h2 id="stop-modal-title">Durak Ekle</h2>
+              <h2 id="stop-modal-title">
+                {editingStopVisit ? 'Durağı Düzenle' : 'Durak Ekle'}
+              </h2>
               <button
                 className="btn ghost icon-action"
                 type="button"
@@ -1327,19 +1532,17 @@ export function DailyPlanPage() {
                 />
               </label>
               <label>
-                Kaçıncı hastadan sonra
+                Hangi hastadan sonra
                 <select
                   value={stopAfterPatient}
                   onChange={(e) => setStopAfterPatient(e.target.value)}
                 >
                   <option value="0">Listenin başına</option>
-                  {Array.from({ length: patientSlotCount }, (_, i) => i + 1).map(
-                    (n) => (
-                      <option key={n} value={String(n)}>
-                        {n}. hastadan sonra
-                      </option>
-                    ),
-                  )}
+                  {patientInsertOptions.map(({ n, name }) => (
+                    <option key={n} value={String(n)}>
+                      {name}’dan sonra
+                    </option>
+                  ))}
                 </select>
               </label>
               {stopError && (
@@ -1360,7 +1563,7 @@ export function DailyPlanPage() {
                   className="btn primary icon-action"
                   type="submit"
                   disabled={stopBusy}
-                  aria-label="Ekle"
+                  aria-label={editingStopVisit ? 'Kaydet' : 'Ekle'}
                 >
                   <IconCheck />
                 </button>

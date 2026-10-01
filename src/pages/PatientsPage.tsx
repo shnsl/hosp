@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { CoordsField } from '../components/CoordsField'
-import { IconCheck, IconClose, IconPlus, IconTrash } from '../components/Icons'
+import { IconCheck, IconClose, IconEdit, IconPlus, IconTrash } from '../components/Icons'
 import { useConfirm } from '../components/useConfirm'
 import {
   createPatient,
@@ -14,9 +14,11 @@ import {
   createStop,
   deleteStop,
   subscribeStops,
+  updateStop,
   type StopFormValues,
 } from '../features/stops/api'
 import { subscribeAllVisits } from '../features/visits/api'
+import { formatLatLng } from '../features/routing/coords'
 import { useAuth } from '../lib/auth'
 import {
   FILE_SELECT_OPTIONS,
@@ -105,6 +107,7 @@ export function PatientsPage() {
 
   const [stops, setStops] = useState<Stop[]>([])
   const [stopsOpen, setStopsOpen] = useState(false)
+  const [editingStopId, setEditingStopId] = useState<string | null>(null)
   const [stopForm, setStopForm] = useState<StopFormValues>(emptyStopForm)
   const [stopSubmitting, setStopSubmitting] = useState(false)
   const [stopFormError, setStopFormError] = useState<string | null>(null)
@@ -307,14 +310,37 @@ export function PatientsPage() {
     setStopSubmitting(true)
     setStopFormError(null)
     try {
-      await createStop(practiceId, stopForm)
+      if (editingStopId) {
+        await updateStop(practiceId, editingStopId, stopForm)
+        setMessage('Durak güncellendi')
+      } else {
+        await createStop(practiceId, stopForm)
+        setMessage('Durak eklendi')
+      }
+      setEditingStopId(null)
       setStopForm(emptyStopForm)
-      setMessage('Durak eklendi')
     } catch (err) {
       setStopFormError(err instanceof Error ? err.message : 'Durak kaydedilemedi')
     } finally {
       setStopSubmitting(false)
     }
+  }
+
+  function openEditStop(stop: Stop) {
+    setStopsOpen(true)
+    setEditingStopId(stop.id)
+    setStopForm({
+      name: stop.name,
+      coords: formatLatLng(stop.lat, stop.lng),
+      waitMin: stop.waitMin,
+    })
+    setStopFormError(null)
+  }
+
+  function cancelEditStop() {
+    setEditingStopId(null)
+    setStopForm(emptyStopForm)
+    setStopFormError(null)
   }
 
   async function onDeleteStop(stop: Stop) {
@@ -325,6 +351,7 @@ export function PatientsPage() {
       confirmLabel: 'Sil',
     })
     if (!ok) return
+    if (editingStopId === stop.id) cancelEditStop()
     await deleteStop(practiceId, stop.id)
   }
 
@@ -481,7 +508,6 @@ export function PatientsPage() {
                 ? 'is-week-3'
                 : 'is-week-other'
           const metaParts = [
-            weekCount === 0 ? 'Plansız' : `${weekCount}×`,
             formatSessionMetaShort({
               fileNo: p.fileNo,
               sessionNo: p.sessionNo,
@@ -497,6 +523,7 @@ export function PatientsPage() {
             <li
               key={p.id}
               className={`patient-card ${p.active ? '' : 'inactive'} ${editingId === p.id ? 'is-editing' : ''}`}
+              data-file={p.fileNo != null ? String(p.fileNo) : undefined}
               style={{ '--session-progress': `${progressPct}%` } as CSSProperties}
             >
               <button
@@ -510,9 +537,11 @@ export function PatientsPage() {
                 onContextMenu={(e) => e.preventDefault()}
               >
                 <span className={`visit-name plan-name ${weekTone}`}>{p.name}</span>
-                <span className="muted small patient-week-count">
-                  {metaParts.join(' · ')}
-                </span>
+                {metaParts.length > 0 ? (
+                  <span className="patient-week-count">
+                    {metaParts.join(' · ')}
+                  </span>
+                ) : null}
                 {p.lat == null || p.lng == null ? (
                   <span className="warn small">Konum yok</span>
                 ) : null}
@@ -642,6 +671,9 @@ export function PatientsPage() {
         {stopsOpen ? (
           <div className="settings-panel-body stack">
             <form className="stack" onSubmit={(e) => void onSaveStop(e)}>
+              <p className="muted small">
+                {editingStopId ? 'Durağı düzenle' : 'Yeni durak'}
+              </p>
               <label>
                 Durak adı
                 <input
@@ -680,14 +712,27 @@ export function PatientsPage() {
                   {stopFormError}
                 </p>
               )}
-              <button
-                className="btn primary icon-action"
-                type="submit"
-                disabled={stopSubmitting}
-                aria-label="Durak kaydet"
-              >
-                <IconCheck />
-              </button>
+              <div className="row-actions">
+                <button
+                  className="btn primary icon-action"
+                  type="submit"
+                  disabled={stopSubmitting}
+                  aria-label={editingStopId ? 'Güncelle' : 'Durak kaydet'}
+                >
+                  <IconCheck />
+                </button>
+                {editingStopId ? (
+                  <button
+                    className="btn ghost icon-action"
+                    type="button"
+                    aria-label="Vazgeç"
+                    onClick={cancelEditStop}
+                    disabled={stopSubmitting}
+                  >
+                    <IconClose />
+                  </button>
+                ) : null}
+              </div>
             </form>
 
             {stops.length === 0 ? (
@@ -695,21 +740,35 @@ export function PatientsPage() {
             ) : (
               <ul className="stop-library-list">
                 {stops.map((s) => (
-                  <li key={s.id} className="stop-library-item">
+                  <li
+                    key={s.id}
+                    className={`stop-library-item${editingStopId === s.id ? ' is-editing' : ''}`}
+                  >
                     <div>
                       <strong className="pick-name">{s.name}</strong>
                       <p className="muted small">
                         {s.waitMin} dk · {s.lat.toFixed(5)}, {s.lng.toFixed(5)}
                       </p>
                     </div>
-                    <button
-                      className="btn danger icon-action"
-                      type="button"
-                      aria-label="Sil"
-                      onClick={() => void onDeleteStop(s)}
-                    >
-                      <IconTrash />
-                    </button>
+                    <div className="row-actions">
+                      <button
+                        className="btn icon-action"
+                        type="button"
+                        aria-label="Düzenle"
+                        title="Düzenle"
+                        onClick={() => openEditStop(s)}
+                      >
+                        <IconEdit />
+                      </button>
+                      <button
+                        className="btn danger icon-action"
+                        type="button"
+                        aria-label="Sil"
+                        onClick={() => void onDeleteStop(s)}
+                      >
+                        <IconTrash />
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>

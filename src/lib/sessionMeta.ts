@@ -32,8 +32,9 @@ export function formatSessionMetaShort(meta: {
   fileHalf?: FileHalf | null
 }): string | null {
   if (meta.fileNo == null || meta.sessionNo == null) return null
-  const half = meta.fileHalf ?? null
-  return `${formatFileLabel(meta.fileNo, half)} · ${meta.sessionNo}. seans`
+  const file =
+    meta.fileHalf != null ? `${meta.fileNo}.${meta.fileHalf}D` : `${meta.fileNo}D`
+  return `${file} - ${meta.sessionNo}`
 }
 
 /** Select değeri: "1" | "1.1" | "1.2" | … */
