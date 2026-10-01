@@ -1649,9 +1649,36 @@ html[data-theme='dark'] .patient-card[data-file='3'] {
   background: color-mix(in srgb, var(--ink) 3%, var(--surface));
 }
 
-.stop-library-item.is-editing {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+.stop-package-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 3%, var(--surface));
+}
+
+.stop-package-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.stop-package-summary {
+  margin: 0.2rem 0 0;
+  line-height: 1.35;
+}
+
+.stop-package-bar .row-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.stop-add-body {
+  margin-top: 0.75rem;
 }
 
 .stops-panel .settings-panel-body {

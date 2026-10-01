@@ -74,6 +74,8 @@ export interface Visit {
   stopName?: string | null
   stopLat?: number | null
   stopLng?: number | null
+  /** Durak paketi kimliği (ör. tam) — paketle eklenen duraklar */
+  stopPackage?: string | null
   createdAt: string
   updatedAt: string
 }

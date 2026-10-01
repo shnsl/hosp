@@ -56,6 +56,10 @@ import { isStopVisit, type LatLng, type Patient, type Stop, type Visit, type Vis
 const MIGRATE_KEY = 'hosp-visits-weekday-migrated'
 const DAY_CLEAR_HOLD_MS = 1000
 const HOLD_MOVE_CANCEL_PX = 12
+/** Durak paketi: başa Tera Ev + Hastane, sona Hemş Ev + Tera Ev */
+const TAM_PACKAGE_ID = 'tam'
+const TAM_PACKAGE_HEAD = ['Tera Ev', 'Hastane'] as const
+const TAM_PACKAGE_TAIL = ['Hemş Ev', 'Tera Ev'] as const
 
 function initialWeekday(param: string | null): Weekday {
   const n = Number(param)
@@ -304,6 +308,17 @@ export function DailyPlanPage() {
     return rows
   }, [sorted, patientMap])
 
+  const hasTamPaket = useMemo(
+    () => sorted.some((v) => isStopVisit(v) && v.stopPackage === TAM_PACKAGE_ID),
+    [sorted],
+  )
+
+  const stopByName = useMemo(() => {
+    const m = new Map<string, Stop>()
+    for (const s of stops) m.set(s.name.trim().toLocaleLowerCase('tr'), s)
+    return m
+  }, [stops])
+
   const plannedPatientIds = useMemo(
     () =>
       new Set(
@@ -529,6 +544,128 @@ export function DailyPlanPage() {
   function closeLibraryStopPrompt() {
     setLibraryStop(null)
     setLibraryWaitError(null)
+  }
+
+  function resolveLibraryStop(name: string): Stop {
+    const s = stopByName.get(name.trim().toLocaleLowerCase('tr'))
+    if (!s) throw new Error(`“${name}” durağı kütüphanede yok`)
+    return s
+  }
+
+  async function applyTamPaket() {
+    if (!practiceId) return
+    setError(null)
+    setNotice(null)
+    setBusyId('tam-paket')
+    try {
+      const headLibs = TAM_PACKAGE_HEAD.map(resolveLibraryStop)
+      const tailLibs = TAM_PACKAGE_TAIL.map(resolveLibraryStop)
+      const existingPackage = sorted.filter(
+        (v) => isStopVisit(v) && v.stopPackage === TAM_PACKAGE_ID,
+      )
+      for (const v of existingPackage) {
+        await deleteVisit(practiceId, v.id)
+      }
+      const middle = sorted.filter(
+        (v) => !(isStopVisit(v) && v.stopPackage === TAM_PACKAGE_ID),
+      )
+      const headVisits: Visit[] = []
+      for (let i = 0; i < headLibs.length; i++) {
+        const lib = headLibs[i]
+        const id = await createStopVisit(practiceId, {
+          weekday,
+          startTime: dayTiming.startTime,
+          order: i,
+          stopName: lib.name,
+          stopLat: lib.lat,
+          stopLng: lib.lng,
+          durationMin: lib.waitMin,
+          stopPackage: TAM_PACKAGE_ID,
+        })
+        headVisits.push({
+          id,
+          patientId: '',
+          weekday,
+          startTime: dayTiming.startTime,
+          order: i,
+          durationMin: lib.waitMin,
+          status: 'planned',
+          kind: 'stop',
+          stopName: lib.name,
+          stopLat: lib.lat,
+          stopLng: lib.lng,
+          stopPackage: TAM_PACKAGE_ID,
+          createdAt: '',
+          updatedAt: '',
+        })
+      }
+      const tailVisits: Visit[] = []
+      for (let i = 0; i < tailLibs.length; i++) {
+        const lib = tailLibs[i]
+        const order = headVisits.length + middle.length + i
+        const id = await createStopVisit(practiceId, {
+          weekday,
+          startTime: dayTiming.startTime,
+          order,
+          stopName: lib.name,
+          stopLat: lib.lat,
+          stopLng: lib.lng,
+          durationMin: lib.waitMin,
+          stopPackage: TAM_PACKAGE_ID,
+        })
+        tailVisits.push({
+          id,
+          patientId: '',
+          weekday,
+          startTime: dayTiming.startTime,
+          order,
+          durationMin: lib.waitMin,
+          status: 'planned',
+          kind: 'stop',
+          stopName: lib.name,
+          stopLat: lib.lat,
+          stopLng: lib.lng,
+          stopPackage: TAM_PACKAGE_ID,
+          createdAt: '',
+          updatedAt: '',
+        })
+      }
+      const next = [...headVisits, ...middle, ...tailVisits]
+      await reschedule(next)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Tam Paket eklenemedi')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function removeTamPaket() {
+    if (!practiceId) return
+    const packageVisits = sorted.filter(
+      (v) => isStopVisit(v) && v.stopPackage === TAM_PACKAGE_ID,
+    )
+    if (packageVisits.length === 0) return
+    const ok = await confirm({
+      title: 'Tam Paketi kaldır',
+      message: `${weekdayLabel(weekday)} listesinden Tam Paket durakları silinsin mi?`,
+      confirmLabel: 'Kaldır',
+    })
+    if (!ok) return
+    setError(null)
+    setNotice(null)
+    setBusyId('tam-paket-remove')
+    try {
+      for (const v of packageVisits) {
+        await deleteVisit(practiceId, v.id)
+      }
+      await reschedule(
+        sorted.filter((v) => !(isStopVisit(v) && v.stopPackage === TAM_PACKAGE_ID)),
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Tam Paket kaldırılamadı')
+    } finally {
+      setBusyId(null)
+    }
   }
 
   async function addStopFromLibrary() {
@@ -1217,31 +1354,92 @@ export function DailyPlanPage() {
           </span>
         </button>
         {addStopOpen ? (
-          stops.length === 0 ? (
-            <p className="muted">
-              Önce <Link to="/patients">hasta listesinden</Link> durak kaydı oluştur.
-            </p>
-          ) : (
-            <ul className="patient-pick-list">
-              {stops.map((s) => (
-                <li key={s.id}>
-                  <div>
-                    <strong className="pick-name is-stop-name">{s.name}</strong>
-                    <p className="muted small">{s.waitMin} dk bekleme</p>
-                  </div>
-                  <button
-                    className="btn primary icon-action"
-                    type="button"
-                    aria-label="Ekle"
-                    disabled={busyId === s.id || scheduling}
-                    onClick={() => openLibraryStopPrompt(s)}
-                  >
-                    {busyId === s.id ? '…' : <IconPlus />}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )
+          <div className="stack stop-add-body">
+            <div className="stop-package-bar">
+              <div className="stop-package-info">
+                <strong className="pick-name is-stop-name">Tam Paket</strong>
+                <p className="muted small stop-package-summary">
+                  <strong>{dayTiming.startTime}</strong>
+                  {' · '}
+                  <strong>{dayTiming.durationMin} dk</strong>
+                  {daySummary?.end ? (
+                    <>
+                      {' · '}
+                      <strong>{daySummary.end}</strong>
+                    </>
+                  ) : null}
+                  {daySummary ? (
+                    <>
+                      {' · '}
+                      <strong>{daySummary.count}</strong> hasta
+                    </>
+                  ) : null}
+                  {daySummary &&
+                  (daySummary.driveMin > 0 || daySummary.driveKm > 0) ? (
+                    <>
+                      {' · '}
+                      <strong>{daySummary.driveKm} km</strong>
+                      {' · '}
+                      <strong>{daySummary.driveMin} dk</strong>
+                    </>
+                  ) : null}
+                </p>
+              </div>
+              <div className="row-actions">
+                <button
+                  className="btn primary"
+                  type="button"
+                  disabled={
+                    scheduling ||
+                    busyId === 'tam-paket' ||
+                    busyId === 'tam-paket-remove' ||
+                    stops.length === 0
+                  }
+                  onClick={() => void applyTamPaket()}
+                >
+                  {busyId === 'tam-paket' ? '…' : hasTamPaket ? 'Yenile' : 'Ekle'}
+                </button>
+                <button
+                  className="btn danger"
+                  type="button"
+                  disabled={
+                    scheduling ||
+                    !hasTamPaket ||
+                    busyId === 'tam-paket' ||
+                    busyId === 'tam-paket-remove'
+                  }
+                  onClick={() => void removeTamPaket()}
+                >
+                  {busyId === 'tam-paket-remove' ? '…' : 'Kaldır'}
+                </button>
+              </div>
+            </div>
+            {stops.length === 0 ? (
+              <p className="muted">
+                Önce <Link to="/patients">hasta listesinden</Link> durak kaydı oluştur.
+              </p>
+            ) : (
+              <ul className="patient-pick-list">
+                {stops.map((s) => (
+                  <li key={s.id}>
+                    <div>
+                      <strong className="pick-name is-stop-name">{s.name}</strong>
+                      <p className="muted small">{s.waitMin} dk bekleme</p>
+                    </div>
+                    <button
+                      className="btn primary icon-action"
+                      type="button"
+                      aria-label="Ekle"
+                      disabled={busyId === s.id || scheduling}
+                      onClick={() => openLibraryStopPrompt(s)}
+                    >
+                      {busyId === s.id ? '…' : <IconPlus />}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         ) : null}
       </section>
 

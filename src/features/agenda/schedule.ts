@@ -206,6 +206,7 @@ export async function rebuildAllSchedulesWithSettings(
       stopName: typeof data.stopName === 'string' ? data.stopName : null,
       stopLat: typeof data.stopLat === 'number' ? data.stopLat : null,
       stopLng: typeof data.stopLng === 'number' ? data.stopLng : null,
+      stopPackage: typeof data.stopPackage === 'string' ? data.stopPackage : null,
       createdAt: '',
       updatedAt: '',
     }

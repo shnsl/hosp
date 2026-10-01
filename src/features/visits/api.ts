@@ -50,6 +50,7 @@ function mapVisit(id: string, data: Record<string, unknown>): Visit {
     stopName: typeof data.stopName === 'string' ? data.stopName : null,
     stopLat: typeof data.stopLat === 'number' ? data.stopLat : null,
     stopLng: typeof data.stopLng === 'number' ? data.stopLng : null,
+    stopPackage: typeof data.stopPackage === 'string' ? data.stopPackage : null,
     createdAt: String(data.createdAtIso ?? data.createdAt ?? ''),
     updatedAt: String(data.updatedAtIso ?? data.updatedAt ?? ''),
   }
@@ -158,6 +159,7 @@ export async function createStopVisit(
     stopLat: number
     stopLng: number
     durationMin: number
+    stopPackage?: string | null
   },
 ): Promise<string> {
   const name = input.stopName.trim()
@@ -180,6 +182,7 @@ export async function createStopVisit(
     stopName: name,
     stopLat: input.stopLat,
     stopLng: input.stopLng,
+    stopPackage: input.stopPackage?.trim() || null,
     order: input.order,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
