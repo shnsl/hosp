@@ -847,21 +847,6 @@ export function DailyPlanPage() {
         await upsertAttendance(practiceId, visit.patientId, occ, status)
       }
 
-      // Alındı’ya geçişte seans hakkını ilerlet
-      if (status === 'done' && current !== 'done') {
-        const patient = patientMap.get(visit.patientId)
-        if (patient) {
-          const adv = await advancePatientSessionOnDone(practiceId, patient)
-          if (adv.exhausted) {
-            await confirm({
-              title: 'Hak bitti',
-              message: `“${patient.name}” için 3 dosya / seans hakkı dolu.\nYeni seans hakkı yok.`,
-              confirmLabel: 'Tamam',
-            })
-          }
-        }
-      }
-
       const updated = sorted.map((v) =>
         v.id === visit.id ? { ...v, status, statusDate } : v,
       )
@@ -903,9 +888,12 @@ export function DailyPlanPage() {
       return
     }
 
+    const doneVisits = marked.filter(
+      (v) => effectiveVisitStatus(v, weekday) === 'done',
+    )
     const ok = await confirm({
       title: 'Günü bitir',
-      message: `${weekdayLabel(weekday)} günü bitirilsin mi?\n${marked.length} kayıt tabloya yazılacak; işaretler sıfırlanır. 2 haftadan eski kayıtlar silinir.`,
+      message: `${weekdayLabel(weekday)} günü bitirilsin mi?\n${marked.length} kayıt tabloya yazılacak; alınmış ${doneVisits.length} hastanın seansı ilerletilecek; işaretler sıfırlanır.`,
       confirmLabel: 'Bitir',
       danger: false,
     })
@@ -915,6 +903,14 @@ export function DailyPlanPage() {
     setError(null)
     setNotice(null)
     try {
+      const exhaustedNames: string[] = []
+      for (const v of doneVisits) {
+        const patient = patientMap.get(v.patientId)
+        if (!patient) continue
+        const adv = await advancePatientSessionOnDone(practiceId, patient)
+        if (adv.exhausted) exhaustedNames.push(patient.name)
+      }
+
       for (const v of marked) {
         const s = effectiveVisitStatus(v, weekday)
         if (s === 'done' || s === 'cancelled') {
@@ -933,8 +929,15 @@ export function DailyPlanPage() {
       )
       await reschedule(reset)
       setNotice(
-        `Gün bitti · ${marked.length} kayıt tutuldu · 2 haftadan eski kayıtlar temizlendi`,
+        `Gün bitti · ${marked.length} kayıt tutuldu · ${doneVisits.length} seans ilerletildi`,
       )
+      if (exhaustedNames.length > 0) {
+        await confirm({
+          title: 'Hak bitti',
+          message: `Seans hakkı dolu:\n${exhaustedNames.map((n) => `• ${n}`).join('\n')}`,
+          confirmLabel: 'Tamam',
+        })
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Gün bitirilemedi')
     } finally {

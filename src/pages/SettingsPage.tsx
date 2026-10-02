@@ -1,5 +1,7 @@
 import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import { IconCheck, IconFingerprint, IconLogout } from '../components/Icons'
+import { DurationWheelPicker, TimeWheelPicker } from '../components/IosWheelPicker'
+import { useConfirm } from '../components/useConfirm'
 import {
   defaultDayScheduleSettings,
   saveDayScheduleSettings,
@@ -8,6 +10,12 @@ import {
   type DayTiming,
 } from '../features/agenda/daySettings'
 import { rebuildAllSchedulesWithSettings } from '../features/agenda/schedule'
+import {
+  clearAllVisitLists,
+  clearAttendanceTable,
+  resetAllSessionAndFileCounts,
+  resetAllSessionCounts,
+} from '../features/reset/api'
 import { ACCENTS } from '../lib/accents'
 import { DEFAULT_PIN, pinSchema, useAuth } from '../lib/auth'
 import {
@@ -20,14 +28,7 @@ import { WEEKDAYS, type Weekday } from '../lib/dates'
 import { useFont } from '../lib/font'
 import { useTheme } from '../lib/theme'
 
-type SectionId = 'schedule' | 'appearance' | 'pin' | 'bio' | 'session'
-
-/** Sadece rakam; 0845 → 08:45 */
-function filterTimeInput(raw: string): string {
-  const digits = raw.replace(/\D/g, '').slice(0, 4)
-  if (digits.length <= 2) return digits
-  return `${digits.slice(0, 2)}:${digits.slice(2)}`
-}
+type SectionId = 'schedule' | 'appearance' | 'pin' | 'bio' | 'reset' | 'session'
 
 function SettingsSection({
   id,
@@ -64,6 +65,7 @@ export function SettingsPage() {
   const { practiceId, changePin, logout } = useAuth()
   const { theme, accent, toggleTheme, setAccent } = useTheme()
   const { fontId, fonts, setFontId } = useFont()
+  const { confirm, dialog: confirmDialog } = useConfirm()
   const [currentPin, setCurrentPin] = useState('')
   const [nextPin, setNextPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
@@ -74,13 +76,18 @@ export function SettingsPage() {
   const [scheduleBusy, setScheduleBusy] = useState(false)
   const [scheduleMessage, setScheduleMessage] = useState<string | null>(null)
   const [scheduleError, setScheduleError] = useState<string | null>(null)
-  const [openSection, setOpenSection] = useState<SectionId | null>(null)
+  const [openSection, setOpenSection] = useState<SectionId | null>('appearance')
   const [bioSupported, setBioSupported] = useState(false)
   const [bioEnabled, setBioEnabled] = useState(false)
   const [bioPin, setBioPin] = useState('')
   const [bioBusy, setBioBusy] = useState(false)
   const [bioMessage, setBioMessage] = useState<string | null>(null)
   const [bioError, setBioError] = useState<string | null>(null)
+  const [resetBusy, setResetBusy] = useState<string | null>(null)
+  const [resetMessage, setResetMessage] = useState<string | null>(null)
+  const [resetError, setResetError] = useState<string | null>(null)
+  const [durationPickerDay, setDurationPickerDay] = useState<Weekday | null>(null)
+  const [timePickerDay, setTimePickerDay] = useState<Weekday | null>(null)
 
   useEffect(() => {
     if (!practiceId) return
@@ -184,6 +191,32 @@ export function SettingsPage() {
     setBioError(null)
   }
 
+  async function runReset(
+    id: string,
+    title: string,
+    message: string,
+    action: () => Promise<string>,
+  ) {
+    if (!practiceId) return
+    const ok = await confirm({
+      title,
+      message,
+      confirmLabel: 'Sıfırla',
+      danger: true,
+    })
+    if (!ok) return
+    setResetBusy(id)
+    setResetError(null)
+    setResetMessage(null)
+    try {
+      setResetMessage(await action())
+    } catch (err) {
+      setResetError(err instanceof Error ? err.message : 'Sıfırlanamadı')
+    } finally {
+      setResetBusy(null)
+    }
+  }
+
   return (
     <div className="page">
       <header className="page-header">
@@ -192,74 +225,6 @@ export function SettingsPage() {
           <h1>Tercihler</h1>
         </div>
       </header>
-
-      <SettingsSection
-        id="schedule"
-        title="Gün Saatleri"
-        open={openSection === 'schedule'}
-        onToggle={toggleSection}
-      >
-        <p className="muted small">
-          Her gün için ilk hasta başlangıcı ve hastada kalış süresi. Rota ve bitiş
-          hesapları buna göre yapılır.
-        </p>
-        <form className="stack" onSubmit={(e) => void onSaveSchedule(e)}>
-          <ul className="day-timing-list">
-            {WEEKDAYS.map((d) => {
-              const t = dayDraft[d.value]
-              return (
-                <li key={d.value} className="day-timing-row">
-                  <strong className="day-timing-label">{d.long}</strong>
-                  <label className="day-timing-field">
-                    Başlangıç
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="off"
-                      placeholder="0845"
-                      maxLength={5}
-                      value={t.startTime}
-                      onChange={(e) =>
-                        setDayTiming(d.value, { startTime: filterTimeInput(e.target.value) })
-                      }
-                    />
-                  </label>
-                  <label className="day-timing-field">
-                    Süre (dk)
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={15}
-                      max={180}
-                      step={5}
-                      value={t.durationMin}
-                      onChange={(e) =>
-                        setDayTiming(d.value, {
-                          durationMin: Number(e.target.value) || t.durationMin,
-                        })
-                      }
-                    />
-                  </label>
-                </li>
-              )
-            })}
-          </ul>
-          {scheduleError && (
-            <p className="error" role="alert">
-              {scheduleError}
-            </p>
-          )}
-          {scheduleMessage && <p className="success">{scheduleMessage}</p>}
-          <button
-            className="btn primary icon-action"
-            type="submit"
-            disabled={scheduleBusy || !practiceId}
-            aria-label="Gün saatlerini kaydet"
-          >
-            <IconCheck />
-          </button>
-        </form>
-      </SettingsSection>
 
       <SettingsSection
         id="appearance"
@@ -315,6 +280,291 @@ export function SettingsPage() {
             </button>
           ))}
         </div>
+      </SettingsSection>
+
+      <SettingsSection
+        id="schedule"
+        title="Gün Saatleri"
+        open={openSection === 'schedule'}
+        onToggle={toggleSection}
+      >
+        <p className="muted small">
+          Her gün için ilk hasta başlangıcı ve hastada kalış süresi. Rota ve bitiş
+          hesapları buna göre yapılır.
+        </p>
+        <form className="stack" onSubmit={(e) => void onSaveSchedule(e)}>
+          <ul className="day-timing-list">
+            {WEEKDAYS.map((d) => {
+              const t = dayDraft[d.value]
+              return (
+                <li key={d.value} className="day-timing-row">
+                  <strong className="day-timing-label">{d.long}</strong>
+                  <label className="day-timing-field">
+                    Başlangıç
+                    <button
+                      className="day-timing-picker-btn"
+                      type="button"
+                      onClick={() => setTimePickerDay(d.value)}
+                    >
+                      {t.startTime}
+                    </button>
+                  </label>
+                  <label className="day-timing-field">
+                    Süre (dk)
+                    <button
+                      className="day-timing-picker-btn"
+                      type="button"
+                      onClick={() => setDurationPickerDay(d.value)}
+                    >
+                      {t.durationMin} dk
+                    </button>
+                  </label>
+                </li>
+              )
+            })}
+          </ul>
+          {scheduleError && (
+            <p className="error" role="alert">
+              {scheduleError}
+            </p>
+          )}
+          {scheduleMessage && <p className="success">{scheduleMessage}</p>}
+          <button
+            className="btn primary icon-action"
+            type="submit"
+            disabled={scheduleBusy || !practiceId}
+            aria-label="Gün saatlerini kaydet"
+          >
+            <IconCheck />
+          </button>
+        </form>
+        <DurationWheelPicker
+          open={durationPickerDay != null}
+          value={
+            durationPickerDay != null
+              ? dayDraft[durationPickerDay].durationMin
+              : 30
+          }
+          title={
+            durationPickerDay != null
+              ? `${WEEKDAYS.find((x) => x.value === durationPickerDay)?.long ?? ''} süresi`
+              : 'Süre (dk)'
+          }
+          onChange={(durationMin) => {
+            if (durationPickerDay != null) {
+              setDayTiming(durationPickerDay, { durationMin })
+            }
+          }}
+          onClose={() => setDurationPickerDay(null)}
+        />
+        <TimeWheelPicker
+          open={timePickerDay != null}
+          value={
+            timePickerDay != null ? dayDraft[timePickerDay].startTime : '08:45'
+          }
+          title={
+            timePickerDay != null
+              ? `${WEEKDAYS.find((x) => x.value === timePickerDay)?.long ?? ''} başlangıç`
+              : 'Başlangıç'
+          }
+          onChange={(startTime) => {
+            if (timePickerDay != null) {
+              setDayTiming(timePickerDay, { startTime })
+            }
+          }}
+          onClose={() => setTimePickerDay(null)}
+        />
+      </SettingsSection>
+
+      <SettingsSection
+        id="reset"
+        title="Sıfırlama"
+        open={openSection === 'reset'}
+        onToggle={toggleSection}
+      >
+        <div className="stack">
+          <p className="muted small">
+            Bu işlemler geri alınamaz. Devam etmeden önce emin ol.
+          </p>
+          <ul className="reset-action-list">
+            <li className="reset-action-item">
+              <div>
+                <strong>Tüm listeleri sıfırla</strong>
+                <p className="muted small">
+                  Pazartesi–Cumartesi günlük planlardaki tüm hasta ve durakları siler.
+                </p>
+              </div>
+              <button
+                className="btn danger"
+                type="button"
+                disabled={!practiceId || resetBusy != null}
+                onClick={() =>
+                  void runReset(
+                    'lists',
+                    'Tüm listeleri sıfırla',
+                    'Tüm günlerin plan listeleri silinsin mi?\nBu işlem geri alınamaz.',
+                    async () => {
+                      const n = await clearAllVisitLists(practiceId!)
+                      return n === 0
+                        ? 'Listeler zaten boştu'
+                        : `${n} kayıt silindi · tüm listeler temiz`
+                    },
+                  )
+                }
+              >
+                {resetBusy === 'lists' ? '…' : 'Sıfırla'}
+              </button>
+            </li>
+            <li className="reset-action-item">
+              <div>
+                <strong>Seans sayılarını sıfırla</strong>
+                <p className="muted small">
+                  Tüm hastalarda seans numarasını 0 yapar; dosya bilgisi aynı kalır.
+                </p>
+              </div>
+              <button
+                className="btn danger"
+                type="button"
+                disabled={!practiceId || resetBusy != null}
+                onClick={() =>
+                  void runReset(
+                    'sessions',
+                    'Seans sayılarını sıfırla',
+                    'Tüm hastalarda seans 0 olsun mu?\nDosya numaraları değişmez.',
+                    async () => {
+                      const n = await resetAllSessionCounts(practiceId!)
+                      return n === 0
+                        ? 'Güncellenecek seans kaydı yoktu'
+                        : `${n} hastada seans 0 yapıldı`
+                    },
+                  )
+                }
+              >
+                {resetBusy === 'sessions' ? '…' : 'Sıfırla'}
+              </button>
+            </li>
+            <li className="reset-action-item">
+              <div>
+                <strong>Seans ve dosya sayılarını sıfırla</strong>
+                <p className="muted small">
+                  Tüm hastalarda dosya 1, seans 0 olur; yarım dosya bilgisi silinir.
+                </p>
+              </div>
+              <button
+                className="btn danger"
+                type="button"
+                disabled={!practiceId || resetBusy != null}
+                onClick={() =>
+                  void runReset(
+                    'sessions-files',
+                    'Seans ve dosya sıfırla',
+                    'Tüm hastalarda dosya=1 ve seans=0 olsun mu?\nYarım dosya bilgileri silinir.',
+                    async () => {
+                      const n = await resetAllSessionAndFileCounts(practiceId!)
+                      return n === 0
+                        ? 'Hasta kaydı yoktu'
+                        : `${n} hastada dosya/seans sıfırlandı`
+                    },
+                  )
+                }
+              >
+                {resetBusy === 'sessions-files' ? '…' : 'Sıfırla'}
+              </button>
+            </li>
+            <li className="reset-action-item">
+              <div>
+                <strong>Özet tablosunu sıfırla</strong>
+                <p className="muted small">
+                  Alındı / iptal özet kayıtlarını (yoklama) temizler.
+                </p>
+              </div>
+              <button
+                className="btn danger"
+                type="button"
+                disabled={!practiceId || resetBusy != null}
+                onClick={() =>
+                  void runReset(
+                    'attendance',
+                    'Özet tablosunu sıfırla',
+                    'Tüm alınmış/iptal özet kayıtları silinsin mi?',
+                    async () => {
+                      const n = await clearAttendanceTable(practiceId!)
+                      return n === 0
+                        ? 'Özet tablosu zaten boştu'
+                        : `${n} özet kayıt silindi`
+                    },
+                  )
+                }
+              >
+                {resetBusy === 'attendance' ? '…' : 'Sıfırla'}
+              </button>
+            </li>
+          </ul>
+          {resetError && (
+            <p className="error" role="alert">
+              {resetError}
+            </p>
+          )}
+          {resetMessage && <p className="success">{resetMessage}</p>}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        id="bio"
+        title="Parmak İzi"
+        open={openSection === 'bio'}
+        onToggle={toggleSection}
+      >
+        {!bioSupported ? (
+          <p className="muted small">
+            Bu cihazda veya tarayıcıda biyometrik giriş yok. HTTPS ve parmak izi /
+            yüz tanıma destekli bir mobil tarayıcı gerekir.
+          </p>
+        ) : bioEnabled ? (
+          <>
+            <p className="muted small">Girişte parmak izi / yüz tanıma açık.</p>
+            {bioMessage && <p className="success">{bioMessage}</p>}
+            <button
+              className="btn danger"
+              type="button"
+              onClick={onDisableBio}
+            >
+              Parmak izi girişini kapat
+            </button>
+          </>
+        ) : (
+          <form className="stack" onSubmit={(e) => void onEnableBio(e)}>
+            <p className="muted small">
+              Açmak için mevcut 6 haneli şifreni gir; cihaz biyometrisi kaydedilir.
+            </p>
+            <label>
+              Şifre
+              <input
+                className="pin-input"
+                type="password"
+                inputMode="numeric"
+                value={bioPin}
+                onChange={(e) =>
+                  setBioPin(e.target.value.replace(/\D/g, '').slice(0, 6))
+                }
+              />
+            </label>
+            {bioError && (
+              <p className="error" role="alert">
+                {bioError}
+              </p>
+            )}
+            {bioMessage && <p className="success">{bioMessage}</p>}
+            <button
+              className="btn primary"
+              type="submit"
+              disabled={bioBusy || bioPin.length !== 6}
+            >
+              <IconFingerprint />{' '}
+              {bioBusy ? 'Bekle…' : 'Parmak izini kaydet'}
+            </button>
+          </form>
+        )}
       </SettingsSection>
 
       <SettingsSection
@@ -379,64 +629,6 @@ export function SettingsPage() {
       </SettingsSection>
 
       <SettingsSection
-        id="bio"
-        title="Parmak İzi"
-        open={openSection === 'bio'}
-        onToggle={toggleSection}
-      >
-        {!bioSupported ? (
-          <p className="muted small">
-            Bu cihazda veya tarayıcıda biyometrik giriş yok. HTTPS ve parmak izi /
-            yüz tanıma destekli bir mobil tarayıcı gerekir.
-          </p>
-        ) : bioEnabled ? (
-          <>
-            <p className="muted small">Girişte parmak izi / yüz tanıma açık.</p>
-            {bioMessage && <p className="success">{bioMessage}</p>}
-            <button
-              className="btn danger"
-              type="button"
-              onClick={onDisableBio}
-            >
-              Parmak izi girişini kapat
-            </button>
-          </>
-        ) : (
-          <form className="stack" onSubmit={(e) => void onEnableBio(e)}>
-            <p className="muted small">
-              Açmak için mevcut 6 haneli şifreni gir; cihaz biyometrisi kaydedilir.
-            </p>
-            <label>
-              Şifre
-              <input
-                className="pin-input"
-                type="password"
-                inputMode="numeric"
-                value={bioPin}
-                onChange={(e) =>
-                  setBioPin(e.target.value.replace(/\D/g, '').slice(0, 6))
-                }
-              />
-            </label>
-            {bioError && (
-              <p className="error" role="alert">
-                {bioError}
-              </p>
-            )}
-            {bioMessage && <p className="success">{bioMessage}</p>}
-            <button
-              className="btn primary"
-              type="submit"
-              disabled={bioBusy || bioPin.length !== 6}
-            >
-              <IconFingerprint />{' '}
-              {bioBusy ? 'Bekle…' : 'Parmak izini kaydet'}
-            </button>
-          </form>
-        )}
-      </SettingsSection>
-
-      <SettingsSection
         id="session"
         title="Oturum"
         open={openSection === 'session'}
@@ -451,6 +643,8 @@ export function SettingsPage() {
           <IconLogout />
         </button>
       </SettingsSection>
+
+      {confirmDialog}
     </div>
   )
 }
