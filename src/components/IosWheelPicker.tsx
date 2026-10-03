@@ -1,7 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  FILE_SELECT_OPTIONS,
+  maxSessionFor,
+  parseFileSelect,
+} from '../lib/sessionMeta'
 
 const ITEM_H = 40
 const VISIBLE = 5
+const LOOP_COPIES = 3
 
 type WheelItem = { value: number; label: string }
 
@@ -27,6 +33,15 @@ function nearestIndex(items: WheelItem[], value: number): number {
   return best
 }
 
+function wrapIndex(idx: number, len: number): number {
+  if (len <= 0) return 0
+  return ((idx % len) + len) % len
+}
+
+function toMiddleCopy(absIdx: number, len: number): number {
+  return len + wrapIndex(absIdx, len)
+}
+
 export function WheelColumn({
   items,
   value,
@@ -35,45 +50,195 @@ export function WheelColumn({
 }: WheelColumnProps) {
   const scrollerRef = useRef<HTMLDivElement>(null)
   const endTimerRef = useRef<number | null>(null)
-  const [active, setActive] = useState(() => nearestIndex(items, value))
+  const recenterTimerRef = useRef<number | null>(null)
+  const unlockTimerRef = useRef<number | null>(null)
+  const suppressScrollRef = useRef(false)
+  const programScrollRef = useRef(false)
+  const valueRef = useRef(value)
+  const itemsRef = useRef(items)
+  const onChangeRef = useRef(onChange)
+  const n = items.length
+  const initialAbs = n > 0 ? toMiddleCopy(nearestIndex(items, value), n) : 0
+  const activeRef = useRef(initialAbs)
+  const wheelLockRef = useRef(false)
+  const [active, setActive] = useState(initialAbs)
   const pad = Math.floor(VISIBLE / 2)
 
-  useEffect(() => {
+  const loopItems = useMemo(() => {
+    if (n === 0) return [] as Array<WheelItem & { loopKey: string }>
+    const out: Array<WheelItem & { loopKey: string }> = []
+    for (let copy = 0; copy < LOOP_COPIES; copy++) {
+      for (let i = 0; i < n; i++) {
+        const item = items[i]
+        out.push({ ...item, loopKey: `${copy}-${i}-${item.value}-${item.label}` })
+      }
+    }
+    return out
+  }, [items, n])
+
+  valueRef.current = value
+  itemsRef.current = items
+  onChangeRef.current = onChange
+
+  function setActiveIndex(idx: number) {
+    activeRef.current = idx
+    setActive(idx)
+  }
+
+  function lockProgramScroll(ms: number) {
+    programScrollRef.current = true
+    if (endTimerRef.current != null) {
+      window.clearTimeout(endTimerRef.current)
+      endTimerRef.current = null
+    }
+    if (unlockTimerRef.current != null) window.clearTimeout(unlockTimerRef.current)
+    unlockTimerRef.current = window.setTimeout(() => {
+      programScrollRef.current = false
+    }, ms)
+  }
+
+  function jumpToAbs(absIdx: number) {
     const el = scrollerRef.current
     if (!el) return
-    const idx = nearestIndex(items, value)
-    setActive(idx)
-    el.scrollTop = idx * ITEM_H
-  }, [value, items])
+    suppressScrollRef.current = true
+    el.scrollTop = absIdx * ITEM_H
+    setActiveIndex(absIdx)
+    requestAnimationFrame(() => {
+      suppressScrollRef.current = false
+    })
+  }
+
+  function emitLogical(logicalIdx: number) {
+    const list = itemsRef.current
+    const len = list.length
+    if (len <= 0) return -1
+    const logical = wrapIndex(logicalIdx, len)
+    const next = list[logical]?.value
+    if (next != null && next !== valueRef.current) onChangeRef.current(next)
+    return logical
+  }
+
+  function recenterToMiddle(absIdx: number) {
+    const len = itemsRef.current.length
+    if (len <= 0) return
+    const mid = toMiddleCopy(absIdx, len)
+    if (mid === absIdx) {
+      setActiveIndex(absIdx)
+      return
+    }
+    jumpToAbs(mid)
+  }
+
+  /** Tıklama / oturunca: her zaman orta kopyaya yaz (ara kare yok). */
+  function commitLogical(logicalIdx: number, smooth = true) {
+    const list = itemsRef.current
+    const len = list.length
+    if (len <= 0) return
+    const logical = emitLogical(logicalIdx)
+    if (logical < 0) return
+    const abs = toMiddleCopy(logical, len)
+    setActiveIndex(abs)
+
+    const el = scrollerRef.current
+    if (!el) return
+    const target = abs * ITEM_H
+    const delta = Math.abs(el.scrollTop - target)
+    if (delta <= 1) return
+
+    if (!smooth || delta > ITEM_H * 1.5) {
+      lockProgramScroll(140)
+      jumpToAbs(abs)
+      return
+    }
+
+    lockProgramScroll(280)
+    el.scrollTo({ top: target, behavior: 'smooth' })
+  }
+
+  /** Tekerlek: bir adım (döngüde komşu kopyaya geçip sonra ortala). */
+  function commitStep(dir: 1 | -1) {
+    const len = itemsRef.current.length
+    if (len <= 0) return
+    let from = activeRef.current
+    const mid = toMiddleCopy(from, len)
+    if (from !== mid) {
+      jumpToAbs(mid)
+      from = mid
+    }
+    const nextAbs = from + dir
+    const logical = emitLogical(nextAbs)
+    if (logical < 0) return
+    setActiveIndex(nextAbs)
+
+    const el = scrollerRef.current
+    if (!el) return
+    lockProgramScroll(300)
+    el.scrollTo({ top: nextAbs * ITEM_H, behavior: 'smooth' })
+    if (recenterTimerRef.current != null) window.clearTimeout(recenterTimerRef.current)
+    recenterTimerRef.current = window.setTimeout(() => {
+      recenterToMiddle(nextAbs)
+    }, 220)
+  }
+
+  // Açılışta active orta kopyada olsa bile scrollTop 0 kalabiliyor; her zaman hizala.
+  useLayoutEffect(() => {
+    const el = scrollerRef.current
+    if (!el || n <= 0) return
+    const logical = nearestIndex(items, value)
+    const abs = toMiddleCopy(logical, n)
+    setActiveIndex(abs)
+    const target = abs * ITEM_H
+    if (Math.abs(el.scrollTop - target) > 1) {
+      lockProgramScroll(120)
+      suppressScrollRef.current = true
+      el.scrollTop = target
+      requestAnimationFrame(() => {
+        suppressScrollRef.current = false
+      })
+    }
+  }, [value, items, n])
 
   useEffect(() => {
     return () => {
       if (endTimerRef.current != null) window.clearTimeout(endTimerRef.current)
+      if (recenterTimerRef.current != null) window.clearTimeout(recenterTimerRef.current)
+      if (unlockTimerRef.current != null) window.clearTimeout(unlockTimerRef.current)
     }
   }, [])
 
-  function commitIndex(idx: number) {
-    const clamped = Math.min(items.length - 1, Math.max(0, idx))
-    setActive(clamped)
-    const next = items[clamped]?.value
-    if (next != null && next !== value) onChange(next)
+  useEffect(() => {
     const el = scrollerRef.current
-    if (el) {
-      const target = clamped * ITEM_H
-      if (Math.abs(el.scrollTop - target) > 1) {
-        el.scrollTo({ top: target, behavior: 'smooth' })
-      }
+    if (!el) return
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (wheelLockRef.current || n <= 0) return
+      if (e.deltaY === 0 && e.deltaX === 0) return
+      const dir = (Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX) > 0 ? 1 : -1
+      wheelLockRef.current = true
+      commitStep(dir === 1 ? 1 : -1)
+      window.setTimeout(() => {
+        wheelLockRef.current = false
+      }, 100)
     }
-  }
+
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [n])
 
   function onScroll() {
     const el = scrollerRef.current
-    if (!el) return
-    const idx = Math.round(el.scrollTop / ITEM_H)
-    setActive(Math.min(items.length - 1, Math.max(0, idx)))
+    if (!el || suppressScrollRef.current || programScrollRef.current || n <= 0) return
+    if (wheelLockRef.current) return
+    const total = n * LOOP_COPIES
+    const idx = Math.min(total - 1, Math.max(0, Math.round(el.scrollTop / ITEM_H)))
+    setActiveIndex(idx)
     if (endTimerRef.current != null) window.clearTimeout(endTimerRef.current)
     endTimerRef.current = window.setTimeout(() => {
-      commitIndex(Math.round(el.scrollTop / ITEM_H))
+      if (programScrollRef.current) return
+      const settled = Math.round(el.scrollTop / ITEM_H)
+      commitLogical(wrapIndex(settled, n), false)
     }, 80)
   }
 
@@ -86,15 +251,15 @@ export function WheelColumn({
         onScroll={onScroll}
       >
         <div style={{ height: pad * ITEM_H }} aria-hidden />
-        {items.map((item, i) => {
+        {loopItems.map((item, i) => {
           const dist = i - active
-          const abs = Math.abs(dist)
+          const absDist = Math.abs(dist)
           const rotate = Math.max(-55, Math.min(55, dist * 20))
-          const opacity = abs === 0 ? 1 : Math.max(0.2, 1 - abs * 0.26)
-          const scale = abs === 0 ? 1.05 : Math.max(0.75, 1 - abs * 0.07)
+          const opacity = absDist === 0 ? 1 : Math.max(0.2, 1 - absDist * 0.26)
+          const scale = absDist === 0 ? 1.05 : Math.max(0.75, 1 - absDist * 0.07)
           return (
             <button
-              key={item.value}
+              key={item.loopKey}
               type="button"
               className={`ios-wheel-item${i === active ? ' is-active' : ''}`}
               style={{
@@ -102,7 +267,7 @@ export function WheelColumn({
                 opacity,
                 transform: `rotateX(${-rotate}deg) scale(${scale})`,
               }}
-              onClick={() => commitIndex(i)}
+              onClick={() => commitLogical(wrapIndex(i, n), true)}
             >
               {item.label}
             </button>
@@ -296,6 +461,90 @@ export function TimeWheelPicker({
             aria-label="Dakika"
           />
         </div>
+      </div>
+    </div>
+  )
+}
+
+type FileSessionWheelPanelProps = {
+  fileValue: string
+  sessionValue: string
+  onFileChange: (fileSelect: string) => void
+  onSessionChange: (sessionNo: string) => void
+}
+
+/** Liste ekranı: dosya + seans iOS tekerlek paneli (gömülü) */
+export function FileSessionWheelPanel({
+  fileValue,
+  sessionValue,
+  onFileChange,
+  onSessionChange,
+}: FileSessionWheelPanelProps) {
+  const fileItems = useMemo(() => {
+    const out: WheelItem[] = [{ value: 0, label: '—' }]
+    FILE_SELECT_OPTIONS.forEach((o, i) => {
+      out.push({ value: i + 1, label: o.label })
+    })
+    return out
+  }, [])
+
+  const fileIndex = useMemo(() => {
+    if (!fileValue) return 0
+    const idx = FILE_SELECT_OPTIONS.findIndex((o) => o.value === fileValue)
+    return idx >= 0 ? idx + 1 : 0
+  }, [fileValue])
+
+  const parsedFile = parseFileSelect(fileValue)
+  const sessionMax = maxSessionFor(parsedFile?.fileHalf ?? null)
+
+  const sessionItems = useMemo(() => {
+    const out: WheelItem[] = []
+    for (let n = 0; n <= sessionMax; n++) {
+      out.push({ value: n, label: String(n) })
+    }
+    return out
+  }, [sessionMax])
+
+  const sessionNum = sessionValue === '' ? 0 : Number(sessionValue)
+  const sessionSafe = Number.isFinite(sessionNum)
+    ? Math.min(sessionMax, Math.max(0, sessionNum))
+    : 0
+
+  return (
+    <div className="ios-wheel-stage ios-wheel-stage-embedded">
+      <div className="ios-wheel-col-wrap">
+        <span className="ios-wheel-col-label">Dosya</span>
+        <WheelColumn
+          items={fileItems}
+          value={fileIndex}
+          onChange={(idx) => {
+            if (idx <= 0) {
+              onFileChange('')
+              onSessionChange('')
+              return
+            }
+            const opt = FILE_SELECT_OPTIONS[idx - 1]
+            if (!opt) return
+            onFileChange(opt.value)
+            const half = parseFileSelect(opt.value)?.fileHalf ?? null
+            const max = maxSessionFor(half)
+            if (sessionValue !== '' && Number(sessionValue) > max) {
+              onSessionChange(String(max))
+            } else if (sessionValue === '') {
+              onSessionChange('0')
+            }
+          }}
+          aria-label="Kaçıncı dosya"
+        />
+      </div>
+      <div className="ios-wheel-col-wrap">
+        <span className="ios-wheel-col-label">Seans</span>
+        <WheelColumn
+          items={sessionItems}
+          value={sessionSafe}
+          onChange={(n) => onSessionChange(String(n))}
+          aria-label="Kaçıncı seans"
+        />
       </div>
     </div>
   )

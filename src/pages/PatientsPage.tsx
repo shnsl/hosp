@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { CoordsField } from '../components/CoordsField'
+import { FileSessionWheelPanel } from '../components/IosWheelPicker'
 import { IconCheck, IconClose, IconEdit, IconPlus, IconTrash } from '../components/Icons'
 import { useConfirm } from '../components/useConfirm'
 import {
@@ -21,11 +22,9 @@ import { subscribeAllVisits } from '../features/visits/api'
 import { formatLatLng } from '../features/routing/coords'
 import { useAuth } from '../lib/auth'
 import {
-  FILE_SELECT_OPTIONS,
   fileSelectValue,
   formatSessionMetaShort,
   maxSessionFor,
-  parseFileSelect,
 } from '../lib/sessionMeta'
 import type { Patient, Stop, Visit } from '../types'
 
@@ -376,8 +375,6 @@ export function PatientsPage() {
     }
   }
 
-  const sessionMax = maxSessionFor(parseFileSelect(fileNo)?.fileHalf ?? null)
-
   return (
     <div className="page">
       <header className="page-header">
@@ -590,44 +587,12 @@ export function PatientsPage() {
               </button>
             </header>
             <form className="stack" onSubmit={(e) => void onSaveSession(e)}>
-              <div className="session-meta-fields">
-                <label>
-                  Kaçıncı Dosyası
-                  <select
-                    value={fileNo}
-                    onChange={(e) => {
-                      const next = e.target.value
-                      setFileNo(next)
-                      const half = parseFileSelect(next)?.fileHalf ?? null
-                      const max = maxSessionFor(half)
-                      if (sessionNo && Number(sessionNo) > max) {
-                        setSessionNo(String(max))
-                      }
-                    }}
-                  >
-                    <option value="">—</option>
-                    {FILE_SELECT_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Kaçıncı Seansı
-                  <select
-                    value={sessionNo}
-                    onChange={(e) => setSessionNo(e.target.value)}
-                  >
-                    <option value="">—</option>
-                    {Array.from({ length: sessionMax + 1 }, (_, i) => i).map((n) => (
-                      <option key={n} value={String(n)}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
+              <FileSessionWheelPanel
+                fileValue={fileNo}
+                sessionValue={sessionNo}
+                onFileChange={setFileNo}
+                onSessionChange={setSessionNo}
+              />
               {sessionError && (
                 <p className="error" role="alert">
                   {sessionError}
