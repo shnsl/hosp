@@ -1,5 +1,5 @@
 import { useRef, type PointerEvent as ReactPointerEvent } from 'react'
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../lib/theme'
 import {
   IconAgenda,
@@ -18,6 +18,9 @@ const HOLD_MOVE_CANCEL_PX = 10
 
 export function AppLayout() {
   const { toggleTheme } = useTheme()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const settingsActive = location.pathname.startsWith('/settings')
   const holdTimerRef = useRef<number | null>(null)
   const longPressedRef = useRef(false)
   const holdStartRef = useRef<{ x: number; y: number } | null>(null)
@@ -29,7 +32,7 @@ export function AppLayout() {
     }
   }
 
-  function onSettingsPointerDown(e: ReactPointerEvent<HTMLAnchorElement>) {
+  function onSettingsPointerDown(e: ReactPointerEvent<HTMLButtonElement>) {
     if (e.button !== 0) return
     longPressedRef.current = false
     holdStartRef.current = { x: e.clientX, y: e.clientY }
@@ -44,7 +47,7 @@ export function AppLayout() {
     }, THEME_HOLD_MS)
   }
 
-  function onSettingsPointerMove(e: ReactPointerEvent<HTMLAnchorElement>) {
+  function onSettingsPointerMove(e: ReactPointerEvent<HTMLButtonElement>) {
     const start = holdStartRef.current
     if (!start || holdTimerRef.current == null) return
     const dx = e.clientX - start.x
@@ -84,24 +87,27 @@ export function AppLayout() {
           <NavLink to="/exceptions" title="İstisnalar" aria-label="İstisnalar">
             <IconExceptions />
           </NavLink>
-          <NavLink
-            to="/settings"
+          <button
+            type="button"
+            className={`nav-settings${settingsActive ? ' active' : ''}`}
             title="Ayarlar · basılı tut: koyu/açık"
             aria-label="Ayarlar"
+            aria-current={settingsActive ? 'page' : undefined}
             onPointerDown={onSettingsPointerDown}
             onPointerMove={onSettingsPointerMove}
             onPointerUp={onSettingsPointerEnd}
             onPointerCancel={onSettingsPointerEnd}
             onContextMenu={(e) => e.preventDefault()}
-            onClick={(e) => {
+            onClick={() => {
               if (longPressedRef.current) {
-                e.preventDefault()
                 longPressedRef.current = false
+                return
               }
+              void navigate('/settings')
             }}
           >
             <IconSettings />
-          </NavLink>
+          </button>
           <button
             type="button"
             className="nav-refresh"

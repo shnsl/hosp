@@ -267,6 +267,9 @@ html[data-theme='dark'][data-accent='indigo'] {
 html {
   overscroll-behavior: none;
   overscroll-behavior-y: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 body {
@@ -277,11 +280,33 @@ body {
   overscroll-behavior-y: none;
   /* Chrome (Android) aşağı çekince yenilemeyi kes */
   overscroll-behavior-block: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 #root {
   min-height: 100vh;
   overscroll-behavior-y: none;
+  -webkit-touch-callout: none;
+}
+
+/* Uzun basış / sürükleme menüleri; yazı alanları hariç */
+a,
+img,
+svg {
+  -webkit-user-drag: none;
+}
+
+input:not([type='button']):not([type='submit']):not([type='reset']):not(
+    [type='checkbox']
+  ):not([type='radio']):not([type='file']),
+textarea,
+select,
+[contenteditable=''],
+[contenteditable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 a {
@@ -491,7 +516,8 @@ html:-webkit-full-screen .app-shell {
 }
 
 .nav a,
-.nav-refresh {
+.nav-refresh,
+.nav-settings {
   display: grid;
   place-items: center;
   width: var(--nav-size);
@@ -504,21 +530,31 @@ html:-webkit-full-screen .app-shell {
   box-sizing: border-box;
 }
 
-.nav-refresh {
+.nav-refresh,
+.nav-settings {
   border: 0;
   background: transparent;
   font: inherit;
   cursor: pointer;
 }
 
+.nav-settings {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
 .nav-refresh:hover,
+.nav-settings:hover,
 .nav a:hover {
   color: var(--ink);
   background: color-mix(in srgb, var(--brand) 10%, transparent);
 }
 
 .nav a svg,
-.nav-refresh svg {
+.nav-refresh svg,
+.nav-settings svg {
   width: 1.4rem;
   height: 1.4rem;
 }
@@ -551,18 +587,21 @@ html:-webkit-full-screen .app-shell {
   }
 
   .nav a,
-  .nav-refresh {
+  .nav-refresh,
+  .nav-settings {
     border-radius: 12px;
   }
 
   .nav a svg,
-  .nav-refresh svg {
+  .nav-refresh svg,
+  .nav-settings svg {
     width: 1.5rem;
     height: 1.5rem;
   }
 }
 
-.nav a.active {
+.nav a.active,
+.nav-settings.active {
   color: var(--brand-strong);
   background: var(--bg-accent);
   font-weight: 600;
