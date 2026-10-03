@@ -1,4 +1,6 @@
+import { useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
+import { useTheme } from '../lib/theme'
 import {
   IconAgenda,
   IconExceptions,
@@ -11,7 +13,52 @@ import {
 } from './Icons'
 import { LiveClock } from './LiveClock'
 
+const THEME_HOLD_MS = 450
+const HOLD_MOVE_CANCEL_PX = 10
+
 export function AppLayout() {
+  const { toggleTheme } = useTheme()
+  const holdTimerRef = useRef<number | null>(null)
+  const longPressedRef = useRef(false)
+  const holdStartRef = useRef<{ x: number; y: number } | null>(null)
+
+  function clearHoldTimer() {
+    if (holdTimerRef.current != null) {
+      window.clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = null
+    }
+  }
+
+  function onSettingsPointerDown(e: ReactPointerEvent<HTMLAnchorElement>) {
+    if (e.button !== 0) return
+    longPressedRef.current = false
+    holdStartRef.current = { x: e.clientX, y: e.clientY }
+    clearHoldTimer()
+    holdTimerRef.current = window.setTimeout(() => {
+      holdTimerRef.current = null
+      longPressedRef.current = true
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(20)
+      }
+      toggleTheme()
+    }, THEME_HOLD_MS)
+  }
+
+  function onSettingsPointerMove(e: ReactPointerEvent<HTMLAnchorElement>) {
+    const start = holdStartRef.current
+    if (!start || holdTimerRef.current == null) return
+    const dx = e.clientX - start.x
+    const dy = e.clientY - start.y
+    if (dx * dx + dy * dy > HOLD_MOVE_CANCEL_PX * HOLD_MOVE_CANCEL_PX) {
+      clearHoldTimer()
+    }
+  }
+
+  function onSettingsPointerEnd() {
+    clearHoldTimer()
+    holdStartRef.current = null
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -37,7 +84,22 @@ export function AppLayout() {
           <NavLink to="/exceptions" title="İstisnalar" aria-label="İstisnalar">
             <IconExceptions />
           </NavLink>
-          <NavLink to="/settings" title="Ayarlar" aria-label="Ayarlar">
+          <NavLink
+            to="/settings"
+            title="Ayarlar · basılı tut: koyu/açık"
+            aria-label="Ayarlar"
+            onPointerDown={onSettingsPointerDown}
+            onPointerMove={onSettingsPointerMove}
+            onPointerUp={onSettingsPointerEnd}
+            onPointerCancel={onSettingsPointerEnd}
+            onContextMenu={(e) => e.preventDefault()}
+            onClick={(e) => {
+              if (longPressedRef.current) {
+                e.preventDefault()
+                longPressedRef.current = false
+              }
+            }}
+          >
             <IconSettings />
           </NavLink>
           <button
