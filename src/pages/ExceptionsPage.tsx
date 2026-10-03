@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { IconCheck, IconClose } from '../components/Icons'
+import { TimeRangeWheelPicker } from '../components/IosWheelPicker'
 import { useConfirm } from '../components/useConfirm'
 import {
   subscribePatients,
@@ -16,13 +17,10 @@ import type { Patient, Visit } from '../types'
 type Draft = { acceptFrom: string; acceptTo: string }
 type SectionId = 'list' | 'overview'
 type OverviewSort = 'window' | 'name'
-
-/** Sadece rakam; 0845 → 08:45, yazarken otomatik : */
-function filterTimeInput(raw: string): string {
-  const digits = raw.replace(/\D/g, '').slice(0, 4)
-  if (digits.length <= 2) return digits
-  return `${digits.slice(0, 2)}:${digits.slice(2)}`
-}
+type TimePickerTarget = {
+  patientId: string
+  name: string
+} | null
 
 function draftsFromPatients(patients: Patient[]): Record<string, Draft> {
   const out: Record<string, Draft> = {}
@@ -118,6 +116,7 @@ export function ExceptionsPage() {
   const [patients, setPatients] = useState<Patient[]>([])
   const [visits, setVisits] = useState<Visit[]>([])
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
+  const [timePicker, setTimePicker] = useState<TimePickerTarget>(null)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -300,63 +299,40 @@ export function ExceptionsPage() {
                 return (
                   <li key={p.id} className="exception-card">
                     <strong className="pick-name exception-card-name">{p.name}</strong>
-                    <div className="exception-card-row">
-                      <div className="exception-times">
-                        <label>
-                          Başlangıç
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            autoComplete="off"
-                            placeholder="0845"
-                            maxLength={5}
-                            lang="tr"
-                            value={d.acceptFrom}
-                            onChange={(e) =>
-                              setDraft(p.id, {
-                                acceptFrom: filterTimeInput(e.target.value),
-                              })
-                            }
-                          />
-                        </label>
-                        <label>
-                          Bitiş
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            autoComplete="off"
-                            placeholder="1200"
-                            maxLength={5}
-                            lang="tr"
-                            value={d.acceptTo}
-                            onChange={(e) =>
-                              setDraft(p.id, {
-                                acceptTo: filterTimeInput(e.target.value),
-                              })
-                            }
-                          />
-                        </label>
-                      </div>
-                      <div className="row-actions exception-card-actions">
-                        <button
-                          className="btn primary icon-action"
-                          type="button"
-                          aria-label="Kaydet"
-                          disabled={busyId === p.id}
-                          onClick={() => void savePatient(p)}
-                        >
-                          <IconCheck />
-                        </button>
-                        <button
-                          className="btn icon-action"
-                          type="button"
-                          aria-label="Kısıtı kaldır"
-                          disabled={busyId === p.id || !hasRule}
-                          onClick={() => void clearPatient(p)}
-                        >
-                          <IconClose />
-                        </button>
-                      </div>
+                    <button
+                      className="day-timing-picker-btn exception-time-btn"
+                      type="button"
+                      aria-label={`${p.name} saat aralığı`}
+                      onClick={() =>
+                        setTimePicker({
+                          patientId: p.id,
+                          name: p.name,
+                        })
+                      }
+                    >
+                      {d.acceptFrom || d.acceptTo
+                        ? `${d.acceptFrom || '…'} – ${d.acceptTo || '…'}`
+                        : '—'}
+                    </button>
+                    <div className="row-actions exception-card-actions">
+                      <button
+                        className="btn primary icon-action"
+                        type="button"
+                        aria-label="Kaydet"
+                        disabled={busyId === p.id}
+                        onClick={() => void savePatient(p)}
+                      >
+                        <IconCheck />
+                      </button>
+                      <button
+                        className="btn icon-action"
+                        type="button"
+                        aria-label="Kısıtı kaldır"
+                        disabled={busyId === p.id || !hasRule}
+                        onClick={() => void clearPatient(p)}
+                      >
+                        <IconClose />
+                      </button>
                     </div>
                   </li>
                 )
@@ -443,6 +419,27 @@ export function ExceptionsPage() {
           </ExceptionSection>
         </div>
       )}
+
+      <TimeRangeWheelPicker
+        open={timePicker != null}
+        fromValue={
+          timePicker
+            ? drafts[timePicker.patientId]?.acceptFrom || '08:45'
+            : '08:45'
+        }
+        toValue={
+          timePicker
+            ? drafts[timePicker.patientId]?.acceptTo || '12:00'
+            : '12:00'
+        }
+        title={timePicker ? timePicker.name : 'Saat aralığı'}
+        onChange={(acceptFrom, acceptTo) => {
+          if (!timePicker) return
+          setDraft(timePicker.patientId, { acceptFrom, acceptTo })
+        }}
+        onClose={() => setTimePicker(null)}
+      />
+
       {confirmDialog}
     </div>
   )

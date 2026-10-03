@@ -180,22 +180,33 @@ export function WheelColumn({
     }, 220)
   }
 
-  // Açılışta active orta kopyada olsa bile scrollTop 0 kalabiliyor; her zaman hizala.
-  useLayoutEffect(() => {
-    const el = scrollerRef.current
+  function syncToValue(el: HTMLDivElement | null = scrollerRef.current) {
     if (!el || n <= 0) return
     const logical = nearestIndex(items, value)
     const abs = toMiddleCopy(logical, n)
     setActiveIndex(abs)
     const target = abs * ITEM_H
-    if (Math.abs(el.scrollTop - target) > 1) {
-      lockProgramScroll(120)
-      suppressScrollRef.current = true
+    if (Math.abs(el.scrollTop - target) <= 1) return
+    lockProgramScroll(120)
+    suppressScrollRef.current = true
+    el.scrollTop = target
+    requestAnimationFrame(() => {
+      // Modal mount’ta layout gecikebiliyor; bir frame daha kilitle
       el.scrollTop = target
       requestAnimationFrame(() => {
         suppressScrollRef.current = false
       })
-    }
+    })
+  }
+
+  // Ref bağlanır bağlanmaz hizala (ilk boyamada boş merkez olmasın)
+  function setScrollerRef(el: HTMLDivElement | null) {
+    scrollerRef.current = el
+    if (el) syncToValue(el)
+  }
+
+  useLayoutEffect(() => {
+    syncToValue()
   }, [value, items, n])
 
   useEffect(() => {
@@ -246,7 +257,7 @@ export function WheelColumn({
     <div className="ios-wheel-col" aria-label={ariaLabel}>
       <div className="ios-wheel-highlight" aria-hidden />
       <div
-        ref={scrollerRef}
+        ref={setScrollerRef}
         className="ios-wheel-scroller"
         onScroll={onScroll}
       >
@@ -370,6 +381,30 @@ function formatHhmm(hour: number, minute: number): string {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
 }
 
+function useTimeWheelItems(minuteStep: number) {
+  const hourItems = useMemo(() => {
+    const out: WheelItem[] = []
+    for (let h = 0; h <= 23; h++) {
+      out.push({ value: h, label: String(h).padStart(2, '0') })
+    }
+    return out
+  }, [])
+
+  const minuteItems = useMemo(() => {
+    const out: WheelItem[] = []
+    for (let m = 0; m < 60; m += minuteStep) {
+      out.push({ value: m, label: String(m).padStart(2, '0') })
+    }
+    return out
+  }, [minuteStep])
+
+  return { hourItems, minuteItems }
+}
+
+function snapMinute(minuteItems: WheelItem[], minute: number): number {
+  return minuteItems[nearestIndex(minuteItems, minute)]?.value ?? 0
+}
+
 type TimeWheelPickerProps = {
   open: boolean
   value: string
@@ -387,34 +422,16 @@ export function TimeWheelPicker({
   onChange,
   onClose,
 }: TimeWheelPickerProps) {
-  const hourItems = useMemo(() => {
-    const out: WheelItem[] = []
-    for (let h = 0; h <= 23; h++) {
-      out.push({ value: h, label: String(h).padStart(2, '0') })
-    }
-    return out
-  }, [])
-
-  const minuteItems = useMemo(() => {
-    const out: WheelItem[] = []
-    for (let m = 0; m < 60; m += minuteStep) {
-      out.push({ value: m, label: String(m).padStart(2, '0') })
-    }
-    return out
-  }, [minuteStep])
-
+  const { hourItems, minuteItems } = useTimeWheelItems(minuteStep)
   const parsed = parseHhmm(value)
-  const snappedMinute =
-    minuteItems[nearestIndex(minuteItems, parsed.minute)]?.value ?? 0
-
   const [hour, setHour] = useState(parsed.hour)
-  const [minute, setMinute] = useState(snappedMinute)
+  const [minute, setMinute] = useState(snapMinute(minuteItems, parsed.minute))
 
   useEffect(() => {
     if (!open) return
     const p = parseHhmm(value)
     setHour(p.hour)
-    setMinute(minuteItems[nearestIndex(minuteItems, p.minute)]?.value ?? 0)
+    setMinute(snapMinute(minuteItems, p.minute))
   }, [open, value, minuteItems])
 
   if (!open) return null
@@ -460,6 +477,129 @@ export function TimeWheelPicker({
             onChange={setMinute}
             aria-label="Dakika"
           />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type TimeRangeWheelPickerProps = {
+  open: boolean
+  fromValue: string
+  toValue: string
+  minuteStep?: number
+  title?: string
+  onChange: (from: string, to: string) => void
+  onClose: () => void
+}
+
+/** Başlangıç + bitiş saatleri tek panel */
+export function TimeRangeWheelPicker({
+  open,
+  fromValue,
+  toValue,
+  minuteStep = 5,
+  title = 'Saat aralığı',
+  onChange,
+  onClose,
+}: TimeRangeWheelPickerProps) {
+  const { hourItems, minuteItems } = useTimeWheelItems(minuteStep)
+  const fromParsed = parseHhmm(fromValue || '08:45')
+  const toParsed = parseHhmm(toValue || '12:00')
+
+  const [fromHour, setFromHour] = useState(fromParsed.hour)
+  const [fromMinute, setFromMinute] = useState(
+    snapMinute(minuteItems, fromParsed.minute),
+  )
+  const [toHour, setToHour] = useState(toParsed.hour)
+  const [toMinute, setToMinute] = useState(
+    snapMinute(minuteItems, toParsed.minute),
+  )
+
+  useEffect(() => {
+    if (!open) return
+    const from = parseHhmm(fromValue || '08:45')
+    const to = parseHhmm(toValue || '12:00')
+    setFromHour(from.hour)
+    setFromMinute(snapMinute(minuteItems, from.minute))
+    setToHour(to.hour)
+    setToMinute(snapMinute(minuteItems, to.minute))
+  }, [open, fromValue, toValue, minuteItems])
+
+  if (!open) return null
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <div
+        className="modal ios-wheel-modal ios-wheel-modal-range"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="modal-header ios-wheel-modal-header">
+          <button className="btn ghost" type="button" onClick={onClose}>
+            İptal
+          </button>
+          <strong>{title}</strong>
+          <button
+            className="btn primary"
+            type="button"
+            onClick={() => {
+              onChange(
+                formatHhmm(fromHour, fromMinute),
+                formatHhmm(toHour, toMinute),
+              )
+              onClose()
+            }}
+          >
+            Tamam
+          </button>
+        </header>
+        <div className="ios-wheel-stage ios-wheel-stage-range">
+          <div className="ios-wheel-col-wrap">
+            <span className="ios-wheel-col-label">Başlangıç</span>
+            <div className="ios-wheel-time-pair">
+              <WheelColumn
+                items={hourItems}
+                value={fromHour}
+                onChange={setFromHour}
+                aria-label="Başlangıç saati"
+              />
+              <span className="ios-wheel-sep" aria-hidden>
+                :
+              </span>
+              <WheelColumn
+                items={minuteItems}
+                value={fromMinute}
+                onChange={setFromMinute}
+                aria-label="Başlangıç dakikası"
+              />
+            </div>
+          </div>
+          <span className="ios-wheel-range-dash" aria-hidden>
+            –
+          </span>
+          <div className="ios-wheel-col-wrap">
+            <span className="ios-wheel-col-label">Bitiş</span>
+            <div className="ios-wheel-time-pair">
+              <WheelColumn
+                items={hourItems}
+                value={toHour}
+                onChange={setToHour}
+                aria-label="Bitiş saati"
+              />
+              <span className="ios-wheel-sep" aria-hidden>
+                :
+              </span>
+              <WheelColumn
+                items={minuteItems}
+                value={toMinute}
+                onChange={setToMinute}
+                aria-label="Bitiş dakikası"
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>

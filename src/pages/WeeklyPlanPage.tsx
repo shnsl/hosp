@@ -4,7 +4,7 @@ import { VISIT_DURATION_MIN, endTimeOf } from '../features/agenda/schedule'
 import { subscribePatients } from '../features/patients/api'
 import { migrateVisitsToWeekday, subscribeAllVisits } from '../features/visits/api'
 import { useAuth } from '../lib/auth'
-import { WEEKDAYS, weekdayLabel, type Weekday } from '../lib/dates'
+import { WEEKDAYS, type Weekday } from '../lib/dates'
 import type { Patient, Visit } from '../types'
 
 const MIGRATE_KEY = 'hosp-visits-weekday-migrated'
@@ -136,11 +136,6 @@ export function WeeklyPlanPage() {
           )
         })}
       </div>
-
-      <p className="muted small">
-        Sırayı değiştirmek için{' '}
-        <Link to="/">{weekdayLabel(1)} günlük plana</Link> git.
-      </p>
     </div>
   )
 }
