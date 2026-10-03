@@ -48,6 +48,7 @@ type SortDir = 'asc' | 'desc'
 
 const SORT_STORAGE_KEY = 'hosp-patient-list-sort'
 const SESSION_HOLD_MS = 1000
+const ADD_HOLD_MS = 450
 const HOLD_MOVE_CANCEL_PX = 12
 
 function loadSort(): { key: SortKey; dir: SortDir } {
@@ -114,6 +115,9 @@ export function PatientsPage() {
   const holdTimerRef = useRef<number | null>(null)
   const holdStartRef = useRef<{ x: number; y: number } | null>(null)
   const longPressOpenedRef = useRef(false)
+  const addHoldTimerRef = useRef<number | null>(null)
+  const addHoldStartRef = useRef<{ x: number; y: number } | null>(null)
+  const addLongPressedRef = useRef(false)
 
   useEffect(() => {
     if (!practiceId) return
@@ -137,6 +141,7 @@ export function PatientsPage() {
   useEffect(() => {
     return () => {
       if (holdTimerRef.current != null) window.clearTimeout(holdTimerRef.current)
+      if (addHoldTimerRef.current != null) window.clearTimeout(addHoldTimerRef.current)
     }
   }, [])
 
@@ -225,6 +230,45 @@ export function PatientsPage() {
       window.clearTimeout(holdTimerRef.current)
       holdTimerRef.current = null
     }
+  }
+
+  function clearAddHoldTimer() {
+    if (addHoldTimerRef.current != null) {
+      window.clearTimeout(addHoldTimerRef.current)
+      addHoldTimerRef.current = null
+    }
+  }
+
+  function onAddPointerDown(e: ReactPointerEvent<HTMLButtonElement>) {
+    if (e.button !== 0) return
+    // Form açıksa kısa dokunuşla kapanır; uzun basış gerekmez
+    if (showForm && !editingId) return
+    addLongPressedRef.current = false
+    addHoldStartRef.current = { x: e.clientX, y: e.clientY }
+    clearAddHoldTimer()
+    addHoldTimerRef.current = window.setTimeout(() => {
+      addHoldTimerRef.current = null
+      addLongPressedRef.current = true
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(20)
+      }
+      openCreate()
+    }, ADD_HOLD_MS)
+  }
+
+  function onAddPointerMove(e: ReactPointerEvent<HTMLButtonElement>) {
+    const start = addHoldStartRef.current
+    if (!start || addHoldTimerRef.current == null) return
+    const dx = e.clientX - start.x
+    const dy = e.clientY - start.y
+    if (dx * dx + dy * dy > HOLD_MOVE_CANCEL_PX * HOLD_MOVE_CANCEL_PX) {
+      clearAddHoldTimer()
+    }
+  }
+
+  function onAddPointerEnd() {
+    clearAddHoldTimer()
+    addHoldStartRef.current = null
   }
 
   function onCardPointerDown(e: ReactPointerEvent<HTMLButtonElement>, patient: Patient) {
@@ -376,23 +420,70 @@ export function PatientsPage() {
   }
 
   return (
-    <div className="page">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">Hastalar</p>
-          <h1>Liste</h1>
-          <p className="muted">
-            {patients.length} kayıt · haftada {visits.length} seans
-          </p>
+    <div className="page patients-page">
+      <header className="patients-toolbar">
+        <div className="patients-toolbar-top">
+          <div className="patients-toolbar-title">
+            <h1>Liste</h1>
+            <p className="muted small patients-page-meta">
+              {patients.length} kayıt · haftada {visits.length} seans
+            </p>
+          </div>
+          <div className="patients-toolbar-right">
+            <button
+              className="btn primary icon-action patients-add-btn"
+              type="button"
+              title={
+                showForm && !editingId
+                  ? 'Kapat'
+                  : 'Yeni hasta · basılı tut'
+              }
+              aria-label={
+                showForm && !editingId
+                  ? 'Kapat'
+                  : 'Yeni hasta eklemek için basılı tut'
+              }
+              onPointerDown={onAddPointerDown}
+              onPointerMove={onAddPointerMove}
+              onPointerUp={onAddPointerEnd}
+              onPointerCancel={onAddPointerEnd}
+              onContextMenu={(e) => e.preventDefault()}
+              onClick={() => {
+                if (addLongPressedRef.current) {
+                  addLongPressedRef.current = false
+                  return
+                }
+                if (showForm && !editingId) closeForm()
+              }}
+            >
+              {showForm && !editingId ? <IconClose /> : <IconPlus />}
+            </button>
+            <div className="patient-sort" role="group" aria-label="Sıralama">
+              <button
+                type="button"
+                className={`patient-sort-chip ${sortKey === 'name' ? 'is-active' : ''}`}
+                onClick={() => selectSort('name')}
+              >
+                İsim {sortKey === 'name' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+              </button>
+              <button
+                type="button"
+                className={`patient-sort-chip ${sortKey === 'weekly' ? 'is-active' : ''}`}
+                onClick={() => selectSort('weekly')}
+              >
+                Haftada {sortKey === 'weekly' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+              </button>
+              <button
+                type="button"
+                className={`patient-sort-chip ${sortKey === 'sessionTotal' ? 'is-active' : ''}`}
+                onClick={() => selectSort('sessionTotal')}
+              >
+                Seans{' '}
+                {sortKey === 'sessionTotal' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+              </button>
+            </div>
+          </div>
         </div>
-        <button
-          className="btn primary icon-action"
-          type="button"
-          aria-label={showForm && !editingId ? 'Kapat' : 'Yeni hasta'}
-          onClick={() => (showForm && !editingId ? closeForm() : openCreate())}
-        >
-          {showForm && !editingId ? <IconClose /> : <IconPlus />}
-        </button>
       </header>
 
       {error && (
@@ -403,7 +494,7 @@ export function PatientsPage() {
       {message && <p className="success">{message}</p>}
 
       {showForm && (
-        <section className="panel">
+        <section className="panel patients-form-panel">
           <h2>{editingId ? 'Hastayı Düzenle' : 'Yeni Hasta'}</h2>
           <form className="stack" onSubmit={(e) => void onSubmit(e)}>
             <label>
@@ -470,30 +561,6 @@ export function PatientsPage() {
           </form>
         </section>
       )}
-
-      <div className="patient-sort" role="group" aria-label="Sıralama">
-        <button
-          type="button"
-          className={`patient-sort-chip ${sortKey === 'name' ? 'is-active' : ''}`}
-          onClick={() => selectSort('name')}
-        >
-          İsim {sortKey === 'name' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-        </button>
-        <button
-          type="button"
-          className={`patient-sort-chip ${sortKey === 'weekly' ? 'is-active' : ''}`}
-          onClick={() => selectSort('weekly')}
-        >
-          Haftada {sortKey === 'weekly' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-        </button>
-        <button
-          type="button"
-          className={`patient-sort-chip ${sortKey === 'sessionTotal' ? 'is-active' : ''}`}
-          onClick={() => selectSort('sessionTotal')}
-        >
-          Seans {sortKey === 'sessionTotal' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-        </button>
-      </div>
 
       <ul className="patient-list">
         {sortedPatients.map((p) => {

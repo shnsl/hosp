@@ -1639,20 +1639,88 @@ html[data-theme='dark'] .weekday-chip.is-active {
   gap: 0.75rem;
 }
 
+.patients-page {
+  gap: 1.1rem;
+}
+
+.patients-toolbar {
+  display: grid;
+  gap: 0;
+  margin-bottom: 0.35rem;
+}
+
+.patients-toolbar-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.patients-toolbar-title {
+  min-width: 0;
+  display: grid;
+  gap: 0.1rem;
+  padding-top: 0.15rem;
+}
+
+.patients-toolbar-title h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.patients-toolbar-right {
+  display: grid;
+  justify-items: end;
+  gap: 0.75rem;
+  flex: 0 0 auto;
+  padding-bottom: 0.2rem;
+}
+
+.patients-page-meta {
+  margin: 0;
+}
+
+.patients-add-btn {
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
+}
+
+.patients-form-panel {
+  padding: 0.75rem;
+}
+
+.patients-page .success,
+.patients-page .error {
+  margin: 0;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.85rem;
+}
+
 .patient-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.45rem;
+  gap: 0.3rem;
 }
 
 .patient-sort {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-bottom: 0.65rem;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  margin: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  max-width: min(100%, 18rem);
+}
+
+.patient-sort::-webkit-scrollbar {
+  display: none;
 }
 
 .patient-sort-chip {
@@ -1660,11 +1728,13 @@ html[data-theme='dark'] .weekday-chip.is-active {
   background: var(--surface);
   color: var(--ink);
   border-radius: 999px;
-  padding: 0.35rem 0.75rem;
+  padding: 0.25rem 0.55rem;
   font: inherit;
-  font-size: 0.85rem;
+  font-size: 0.76rem;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .patient-sort-chip.is-active {
@@ -1797,9 +1867,10 @@ html[data-theme='dark'] .accept-dot.is-warn {
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 0.4rem 0.35rem 0.4rem 0.55rem;
+  border-radius: 10px;
+  padding: 0.28rem 0.25rem 0.28rem 0.4rem;
   box-shadow: none;
+  gap: 0.35rem;
   gap: 0.25rem;
   min-width: 0;
   --session-progress: 0%;
@@ -1857,25 +1928,25 @@ html[data-theme='dark'] .patient-card[data-file='3'] {
 }
 
 .patient-card .plan-name {
-  font-size: 0.88rem;
-  line-height: 1.2;
+  font-size: 0.82rem;
+  line-height: 1.15;
 }
 
 .patient-card .patient-week-count {
-  font-size: 0.86rem;
+  font-size: 0.78rem;
   font-weight: 650;
-  line-height: 1.2;
+  line-height: 1.15;
   color: var(--session-meta-color);
 }
 
 .patient-card .warn.small {
-  font-size: 0.72rem;
-  line-height: 1.2;
+  font-size: 0.68rem;
+  line-height: 1.1;
 }
 
 .patient-card .btn.icon-action {
-  width: 2rem;
-  height: 2rem;
+  width: 1.75rem;
+  height: 1.75rem;
   flex-shrink: 0;
 }
 

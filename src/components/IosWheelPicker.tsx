@@ -242,8 +242,9 @@ export function WheelColumnString({
 
   useEffect(() => {
     const el = scrollerRef.current
-    const root = rootRef.current
-    if (!el || !root) return
+    const rootNode = rootRef.current
+    if (!el || !rootNode) return
+    const rootEl: HTMLDivElement = rootNode
     let frame = 0
     let settleTimer = 0
     let idleRaf = 0
@@ -429,7 +430,7 @@ export function WheelColumnString({
       suppressScrollRef.current = false
       el!.style.overflowY = 'hidden'
       try {
-        root.setPointerCapture(e.pointerId)
+        rootEl.setPointerCapture(e.pointerId)
       } catch {
         /* ignore */
       }
@@ -467,7 +468,7 @@ export function WheelColumnString({
       if (e.pointerId !== activePointerId) return
       activePointerId = null
       try {
-        root.releasePointerCapture(e.pointerId)
+        rootEl.releasePointerCapture(e.pointerId)
       } catch {
         /* ignore */
       }
@@ -520,19 +521,19 @@ export function WheelColumnString({
     }
 
     el.addEventListener('scroll', onScroll, { passive: true })
-    // root: maske/highlight üstünden de tekerlek + sürükleme
-    root.addEventListener('wheel', onWheel, { passive: false })
-    root.addEventListener('pointerdown', onPointerDown, { capture: true })
-    root.addEventListener('pointermove', onPointerMove, { capture: true })
-    root.addEventListener('pointerup', onPointerUp, { capture: true })
-    root.addEventListener('pointercancel', onPointerUp, { capture: true })
+    // rootEl: maske/highlight üstünden de tekerlek + sürükleme
+    rootEl.addEventListener('wheel', onWheel, { passive: false })
+    rootEl.addEventListener('pointerdown', onPointerDown, { capture: true })
+    rootEl.addEventListener('pointermove', onPointerMove, { capture: true })
+    rootEl.addEventListener('pointerup', onPointerUp, { capture: true })
+    rootEl.addEventListener('pointercancel', onPointerUp, { capture: true })
     return () => {
       el.removeEventListener('scroll', onScroll)
-      root.removeEventListener('wheel', onWheel)
-      root.removeEventListener('pointerdown', onPointerDown, true)
-      root.removeEventListener('pointermove', onPointerMove, true)
-      root.removeEventListener('pointerup', onPointerUp, true)
-      root.removeEventListener('pointercancel', onPointerUp, true)
+      rootEl.removeEventListener('wheel', onWheel)
+      rootEl.removeEventListener('pointerdown', onPointerDown, true)
+      rootEl.removeEventListener('pointermove', onPointerMove, true)
+      rootEl.removeEventListener('pointerup', onPointerUp, true)
+      rootEl.removeEventListener('pointercancel', onPointerUp, true)
       window.cancelAnimationFrame(frame)
       window.cancelAnimationFrame(idleRaf)
       window.cancelAnimationFrame(correctRaf)
