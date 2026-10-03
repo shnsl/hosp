@@ -564,29 +564,47 @@ export function PatientsPage() {
 
       {sessionPatient ? (
         <div
-          className="modal-backdrop"
+          className="wheel-sheet-backdrop"
           role="presentation"
           onClick={closeSessionPopup}
         >
           <div
-            className="modal session-meta-modal"
+            className="wheel-sheet session-meta-sheet"
             role="dialog"
             aria-modal="true"
             aria-labelledby="session-meta-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <header className="modal-header">
-              <h2 id="session-meta-title">{sessionPatient.name}</h2>
+            <div className="wheel-sheet-header">
               <button
-                className="btn ghost icon-action"
+                className="btn ghost btn-compact"
                 type="button"
-                aria-label="Kapat"
                 onClick={closeSessionPopup}
+                disabled={sessionBusy}
               >
-                <IconClose />
+                İptal
               </button>
-            </header>
-            <form className="stack" onSubmit={(e) => void onSaveSession(e)}>
+              <strong id="session-meta-title">{sessionPatient.name}</strong>
+              <button
+                className="btn primary btn-compact icon-action"
+                type="button"
+                disabled={sessionBusy}
+                aria-label="Kaydet"
+                onClick={() => {
+                  const form = document.getElementById(
+                    'session-meta-form',
+                  ) as HTMLFormElement | null
+                  form?.requestSubmit()
+                }}
+              >
+                <IconCheck />
+              </button>
+            </div>
+            <form
+              id="session-meta-form"
+              className="stack session-meta-form"
+              onSubmit={(e) => void onSaveSession(e)}
+            >
               <FileSessionWheelPanel
                 fileValue={fileNo}
                 sessionValue={sessionNo}
@@ -598,24 +616,6 @@ export function PatientsPage() {
                   {sessionError}
                 </p>
               )}
-              <footer className="modal-footer session-meta-footer">
-                <button
-                  className="btn ghost"
-                  type="button"
-                  onClick={closeSessionPopup}
-                  disabled={sessionBusy}
-                >
-                  İptal
-                </button>
-                <button
-                  className="btn primary icon-action"
-                  type="submit"
-                  disabled={sessionBusy}
-                  aria-label="Kaydet"
-                >
-                  <IconCheck />
-                </button>
-              </footer>
             </form>
           </div>
         </div>

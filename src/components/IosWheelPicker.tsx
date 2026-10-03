@@ -242,7 +242,8 @@ export function WheelColumnString({
 
   useEffect(() => {
     const el = scrollerRef.current
-    if (!el) return
+    const root = rootRef.current
+    if (!el || !root) return
     let frame = 0
     let settleTimer = 0
     let idleRaf = 0
@@ -253,10 +254,12 @@ export function WheelColumnString({
     let releaseVelocity = 0
     let liveVelocity = 0
     let dragging = false
+    let moved = false
     let dragStartY = 0
     let dragStartScroll = 0
-    let lastTouchY = 0
-    let lastTouchT = 0
+    let lastPointerY = 0
+    let lastPointerT = 0
+    let activePointerId: number | null = null
     let velSamples: number[] = []
 
     function maxVisual() {
@@ -309,9 +312,9 @@ export function WheelColumnString({
     }
 
     function snapHard(visual: number) {
-      const root = rootRef.current
-      if (root) {
-        const measured = readItemH(root)
+      const measuredRoot = rootRef.current
+      if (measuredRoot) {
+        const measured = readItemH(measuredRoot)
         if (measured > 0) itemHRef.current = measured
       }
       const step = itemHRef.current || DEFAULT_ITEM_H
@@ -411,9 +414,12 @@ export function WheelColumnString({
       if (!touchActiveRef.current) waitIdleThenSettle()
     }
 
-    function onTouchStart(e: TouchEvent) {
-      if (e.touches.length !== 1) return
-      const t = e.touches[0]!
+    /** Sütunun her yerinden (maske/boşluk dahil) sürükle */
+    function onPointerDown(e: PointerEvent) {
+      if (e.button !== 0 && e.pointerType === 'mouse') return
+      if (activePointerId != null) return
+      activePointerId = e.pointerId
+      moved = false
       touchActiveRef.current = true
       interactingRef.current = true
       dragging = true
@@ -422,29 +428,34 @@ export function WheelColumnString({
       window.clearTimeout(suppressTimerRef.current)
       suppressScrollRef.current = false
       el!.style.overflowY = 'hidden'
+      try {
+        root.setPointerCapture(e.pointerId)
+      } catch {
+        /* ignore */
+      }
 
-      dragStartY = t.clientY
+      dragStartY = e.clientY
       dragStartScroll = el!.scrollTop
-      lastTouchY = t.clientY
-      lastTouchT = performance.now()
+      lastPointerY = e.clientY
+      lastPointerT = performance.now()
       liveVelocity = 0
       releaseVelocity = 0
       velSamples = []
     }
 
-    function onTouchMove(e: TouchEvent) {
-      if (!dragging || e.touches.length !== 1) return
+    function onPointerMove(e: PointerEvent) {
+      if (!dragging || e.pointerId !== activePointerId) return
       e.preventDefault()
-      const t = e.touches[0]!
       const now = performance.now()
-      const y = t.clientY
-      const dt = Math.max(1, now - lastTouchT)
-      const instant = (lastTouchY - y) / dt
+      const y = e.clientY
+      if (Math.abs(y - dragStartY) > 3) moved = true
+      const dt = Math.max(1, now - lastPointerT)
+      const instant = (lastPointerY - y) / dt
       velSamples.push(instant)
       if (velSamples.length > 5) velSamples.shift()
       liveVelocity = velSamples.reduce((a, b) => a + b, 0) / velSamples.length
-      lastTouchY = y
-      lastTouchT = now
+      lastPointerY = y
+      lastPointerT = now
 
       const step = itemHRef.current || DEFAULT_ITEM_H
       const maxTop = scrollTopForVisual(el!, maxVisual(), step)
@@ -452,7 +463,14 @@ export function WheelColumnString({
       paintFromScroll()
     }
 
-    function onTouchEnd() {
+    function onPointerUp(e: PointerEvent) {
+      if (e.pointerId !== activePointerId) return
+      activePointerId = null
+      try {
+        root.releasePointerCapture(e.pointerId)
+      } catch {
+        /* ignore */
+      }
       if (!dragging) {
         touchActiveRef.current = false
         return
@@ -460,7 +478,18 @@ export function WheelColumnString({
       dragging = false
       releaseVelocity = liveVelocity
       touchActiveRef.current = false
-      settle(releaseVelocity)
+      // Kısa dokunuşta tıklama kalsın; sürükleyince hemen satıra oturt
+      if (moved) {
+        settle(releaseVelocity)
+        // click olayını yut
+        touchActiveRef.current = true
+        window.setTimeout(() => {
+          touchActiveRef.current = false
+        }, 80)
+      } else {
+        el!.style.overflowY = ''
+        interactingRef.current = false
+      }
     }
 
     function onWheel(e: WheelEvent) {
@@ -491,18 +520,19 @@ export function WheelColumnString({
     }
 
     el.addEventListener('scroll', onScroll, { passive: true })
-    el.addEventListener('wheel', onWheel, { passive: false })
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: false })
-    el.addEventListener('touchend', onTouchEnd, { passive: true })
-    el.addEventListener('touchcancel', onTouchEnd, { passive: true })
+    // root: maske/highlight üstünden de tekerlek + sürükleme
+    root.addEventListener('wheel', onWheel, { passive: false })
+    root.addEventListener('pointerdown', onPointerDown, { capture: true })
+    root.addEventListener('pointermove', onPointerMove, { capture: true })
+    root.addEventListener('pointerup', onPointerUp, { capture: true })
+    root.addEventListener('pointercancel', onPointerUp, { capture: true })
     return () => {
       el.removeEventListener('scroll', onScroll)
-      el.removeEventListener('wheel', onWheel)
-      el.removeEventListener('touchstart', onTouchStart)
-      el.removeEventListener('touchmove', onTouchMove)
-      el.removeEventListener('touchend', onTouchEnd)
-      el.removeEventListener('touchcancel', onTouchEnd)
+      root.removeEventListener('wheel', onWheel)
+      root.removeEventListener('pointerdown', onPointerDown, true)
+      root.removeEventListener('pointermove', onPointerMove, true)
+      root.removeEventListener('pointerup', onPointerUp, true)
+      root.removeEventListener('pointercancel', onPointerUp, true)
       window.cancelAnimationFrame(frame)
       window.cancelAnimationFrame(idleRaf)
       window.cancelAnimationFrame(correctRaf)
